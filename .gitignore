@@ -1,0 +1,39 @@
+# Build output
+build/
+out/
+
+# Binaries
+main
+*.out
+
+# Libraries
+*.so
+*.a
+*.o
+
+# Logs
+*.log
+
+# Generated documents
+*.pdf
+*.html
+
+# Generated assets
+generated/
+svgs/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Editors
+.vscode/
+.idea/
+
+# Vim
+*.swp
+*.swo
+Session.vim

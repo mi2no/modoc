@@ -1,0 +1,2 @@
+g++ main.cpp -o main -std=c++20 -rdynamic
+g++ -shared -fPIC backends/latex.cpp -o backends/latex.so
