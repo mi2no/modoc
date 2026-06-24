@@ -31,3 +31,11 @@ The serialized json structure must be outputed to a temporary file or file descr
 defined by the environmental variables: `MODOC_JSON_FILE`, `MODOC_JSON_FD`. It is possible
 to explicitly define a different file descriptor (for example stdout) by providing the fd
 options parameter.
+
+### JSON representation
+```
+{
+    "type": "gen";
+    "command": "./program";
+}
+```

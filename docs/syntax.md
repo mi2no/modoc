@@ -20,10 +20,10 @@ A node can take in options in the form of a list:
 ```
 This is optional.
 
-### Ids
-A node can be assigned an id - for styling:
+### Attributes
+A node can be assigned tags - for styling:
 ```
-@node(id)
+@node(tag1, tag2)
 ```
 This is optional.
 
