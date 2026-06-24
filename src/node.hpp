@@ -81,11 +81,12 @@ struct text_node : node {
 
 struct node_factory {
     virtual node* instance(uint8_t nesting, const options_t&) = 0;
+    virtual node* deserialize() = 0;
     virtual void set_node_type_id(uint32_t) const = 0;
     virtual ~node_factory() = default;
 };
 
-bool debug_str_match(const char* a, const char* b) {
+static bool debug_str_match(const char* a, const char* b) {
     while (*a != '\0' && *b != '\0')
         if (*a++ != *b++) return false;
     return true;
@@ -309,3 +310,5 @@ struct code_f : node_factory {
 uint32_t sec_node::t_id = 0;
 uint32_t list_node::t_id = 0;
 uint32_t code_node::t_id = 0;
+
+static std::unordered_map<std::string_view, node_factory*> nodes;

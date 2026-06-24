@@ -44,8 +44,6 @@ std::unordered_set<std::string> dependecies;
     s += '$';
 }*/
 
-std::unordered_map<std::string_view, node_factory*> nodes;
-
 void put_tokens(std::string& s, const std::vector<std::string_view>& tokens, const uint8_t& nest = 0) {
     for (size_t i = 0; i < tokens.size(); ++i) {
             const std::string_view& view = tokens[i];

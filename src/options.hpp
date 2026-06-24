@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdlib>
+#include <cstring>
 #include <string_view>
 #include <iostream>
 #include <map>
@@ -198,3 +200,100 @@ size_t get_options(const char* const& str, options_t& map) {
         std::cout << '\n';
     }
 }*/
+
+
+
+#include "../../serialize/serialize.hpp"
+
+struct object_new {
+    enum type_e : uint8_t {
+        STRING, NUMBER, LIST, JSON, NONE
+    };
+
+    union {
+        //std::string str;
+        char* str;
+        double num;
+        object_new* list;
+    };
+
+    uint8_t type = NONE;
+    size_t size = 1;
+
+    object_new() {}
+
+    //static object_new parse(std::string_view view) {
+    static object_new parse(const char* view) {
+        object_new result;
+
+        if (view[0] == '"') {
+            result.type = STRING;
+           
+            std::string str;
+            const char* ptr = view;//.data();
+            json::deserialize_value(str, ptr);
+            result.str = new char[str.size() + 1];
+
+            memcpy(result.str, str.data(), str.size());
+            result.str[str.size()] = '\0';
+        }
+        else if (view[0] == '[') {
+            result.type = LIST;
+
+            {
+                uint8_t depth = 1;
+                const char* itr = view + 1;
+
+                while (depth) {
+                    if (*itr == '[') ++depth;
+                    else if (*itr == ']') --depth;
+                    else if (*itr == ',' && depth == 1) ++result.size;
+
+                    ++itr;
+                }
+            }
+
+            result.list = new object_new[result.size]{};
+
+            {
+                uint8_t depth = 1;
+                const char* itr = view + 1;
+                size_t i = 0;
+
+                while (depth) {
+                    if (*itr == '[') ++depth;
+                    else if (*itr == ']') --depth;
+                    else if (depth == 1) {
+                        if (*itr == ',') ++i;
+                        else if (*itr != ' ') result.list[i] = object_new::parse(itr);
+                    }
+
+                    ++itr;
+                }
+            }
+        }
+        else if (view[0] == '{') {
+            /*
+            if (type_str.size()) {
+                result.type = NODE;
+                result.node = nodes[std::string_view(type_str)]->deserialize(view);
+            }
+            else*/ result.type = JSON;
+            // node or object
+        }
+        else {
+            char* end;
+            result.num = strtod(view/*.data()*/, &end);
+
+            /*if (end - view.data() == view.size())*/ result.type = NUMBER;
+        }
+
+        return result;
+    }
+
+    ~object_new() {
+        if (type == STRING) delete[] str; //str.~basic_string();
+        else if (type == LIST) delete[] list; //free(list);
+        //else if (type == NODE) delete node;
+    }
+};
