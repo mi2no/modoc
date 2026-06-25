@@ -14,6 +14,9 @@
 #include "node.hpp"
 #include "options.hpp"
 
+// Nodes
+#include "nodes/gen.hpp"
+
 constexpr char KEYWORD_CHAR = '@';
 
 //std::unordered_map<std::string_view, keyword*> keywords;
@@ -59,6 +62,8 @@ void put_tokens(std::string& s, const std::vector<std::string_view>& tokens, con
             }
         }
 }
+
+bool primitives_only = true;
 
 std::vector<node*> create_tree(const char* const& buffer) {
     std::vector<node*> result;
@@ -134,6 +139,8 @@ std::vector<node*> create_tree(const char* const& buffer) {
                                 //stack.push(ik);
                                 node* instance = nodes[view]->instance(tabs, options);
                                 options.clear();
+
+                                if (!instance->is_primitive()) primitives_only = false;
                                 
                                 if (stack.size()) stack.top()->add_node(instance);
                                 else result.push_back(instance);
@@ -251,7 +258,7 @@ void print_node(const node* n, std::list<uint8_t>& sec_id, std::list<bool>& bran
     //delete n;
 }
 
-void print_doc_tree(const std::vector<node*> tree) {
+void print_doc_tree(const std::vector<node*>& tree) {
     //puts("untitled");
     puts("\u25CF");
     std::list<uint8_t> sec_id;
@@ -263,6 +270,27 @@ void print_doc_tree(const std::vector<node*> tree) {
     for (size_t i = 0; i < tree.size(); ++i) {
         branch_end.back() = i == tree.size() - 1;
         print_node(tree[i], sec_id, branch_end, false);
+    }
+}
+
+void to_primitive_tree(std::vector<node*>& tree) {
+    if (primitives_only) return;
+
+    puts("here");
+
+    for (auto itr = tree.begin(); itr != tree.end(); ++itr) {
+        node* n = *itr;
+
+        if (!n->is_primitive()) {
+            std::vector<node*> primitives = ((special_node*)n)->to_primitives();
+            itr = tree.erase(itr);
+
+            printf("size: %zu\n", primitives.size());
+
+            if (primitives.size()) tree.insert(itr, primitives.begin(), primitives.end());
+            --itr; // In the next loop the first new "primitive" will be tested
+        }
+        else if (n->child_nodes() != nullptr) to_primitive_tree(*(std::vector<node*>*)n->child_nodes());
     }
 }
 
@@ -344,7 +372,6 @@ bool str_match(const char* a, const char* b) {
     return true;
 }
 
-
 int main(int argc, char** argv) {
 
     // ./main [src_file] --backend
@@ -391,6 +418,7 @@ int main(int argc, char** argv) {
     register_node_factory("sec", new sec_f());
     register_node_factory("list", new list_f());
     register_node_factory("code", new code_f());
+    register_node_factory("gen", new gen_f());
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);
@@ -413,6 +441,12 @@ int main(int argc, char** argv) {
 
     puts("Document tree structure:\n");
     print_doc_tree(tree);
+
+    if (!primitives_only) {
+        puts("To primitives:\n");
+        to_primitive_tree(tree);
+        print_doc_tree(tree);
+    }
 
     to_doc(tree, backends[backend_id].c_str());
 
