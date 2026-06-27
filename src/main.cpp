@@ -282,10 +282,10 @@ void to_primitive_tree(std::vector<node*>& tree) {
         node* n = *itr;
 
         if (!n->is_primitive()) {
-            std::vector<node*> primitives = ((special_node*)n)->to_primitives();
+            std::vector<node*> primitives = ((special_node*)n)->expand();
             itr = tree.erase(itr);
 
-            printf("size: %zu\n", primitives.size());
+            printf("expanded size: %zu\n", primitives.size());
 
             if (primitives.size()) tree.insert(itr, primitives.begin(), primitives.end());
             --itr; // In the next loop the first new "primitive" will be tested

@@ -43,7 +43,7 @@ struct node {
 };
 
 struct special_node : node {
-    virtual std::vector<node*> to_primitives() const = 0;
+    virtual std::vector<node*> expand() const = 0;
 
     bool is_primitive() const override final {
         return false;

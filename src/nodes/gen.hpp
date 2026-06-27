@@ -55,7 +55,7 @@ struct gen_node : special_node {
 
 public:
 
-    std::vector<node*> to_primitives() const override {
+    std::vector<node*> expand() const override {
         char path[] = "tmp_json_XXXXXX";
         int fd = mkstemp(path);
 
@@ -72,54 +72,45 @@ public:
         close(fd);
         unlink(path);
 
-        printf("out: [%s]\n", json);
+        puts("[@gen] json:");
+        json::pretty_print(json);
 
         std::vector<node*> v;
         {
             const char* ptr = json;
-            const node_info info = json::deserialize<node_info>(ptr);
-          
+            std::vector<node_info> subtree;
+            json::deserialize_value(subtree, ptr);
+
             struct xd {
-                node_info info;
-                size_t i;
-                node* n;
+                const std::vector<node_info>& infos;
+                size_t ind;
+                node* parent;
             };
             std::stack<xd> stack;
 
-            stack.push({info, 0, nullptr});
+            stack.push({subtree, 0, nullptr});
 
             while (stack.size()) {
-                if (stack.top().i == 0) {
-                    for (auto entry : info.json_map)
-                        printf("%.*s: %c\n", (int)entry.first.size(), (const char*)entry.first.data(), *entry.second);                
-                    putchar('\n');
-                    stack.top().n = nodes[stack.top().info.type]->deserialize(depth + stack.size() - 1, stack.top().info.json_map);
-                }
+                xd* top = &stack.top(); 
+                node* curr = nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
 
-                if (stack.top().i == stack.top().info.children.size() || stack.top().n->child_nodes() == nullptr) {
-                    if (stack.size() == 1) {
-                        v.push_back(stack.top().n);
+                if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
+                    if (top->parent == nullptr) v.push_back(curr);
+                    else top->parent->add_node(curr);
+
+                    while (++top->ind == top->infos.size()) {
+                        node* const parent = top->parent;
                         stack.pop();
-                    }
-                    else {
-                        node* ptr = stack.top().n;
-                        stack.pop();
-                        
-                        stack.top().n->add_node(ptr);
+
+                        if (stack.empty()) break;
+
+                        top = &stack.top();
+                        if (top->parent == nullptr) v.push_back(parent);
+                        else top->parent->add_node(parent);
                     }
                 }
-                else stack.push({stack.top().info.children[stack.top().i++], 0, nullptr});
+                else stack.push({top->infos[top->ind].children, 0, curr});
             }
-
-            //const std::string type = json::deserialize_field<std::string>(json, "type");
-            printf("Node type: %s\nChildren: %zu\n", info.type.c_str(), info.children.size());
-
-            //delete s;
-            //v.push_back(nodes[type]->deserialize(json));
-            //v.push_back(new sec_node({100}));
-            //
-
-            return v;
         }
 
         delete[] json;

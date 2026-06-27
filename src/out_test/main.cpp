@@ -35,13 +35,11 @@ int main() {
         return 1;
     }
 
-    sec_node s {"sec", "Sekcja dodatkowa"};
-    s.children.push_back({"sec", "Podsekcja 1"});
-    s.children.push_back({"sec", "Podsekcja 2"});
+    std::vector<sec_node> v {{"sec", "Sekcja dodatkowa"}};
+    v[0].children.push_back({"sec", "Podsekcja 1"});
+    v[0].children.push_back({"sec", "Podsekcja 2"});
 
-    const std::string json = json::serialize_struct(s);
-
-    json::pretty_print(json.c_str());
+    const std::string json = json::serialize_value(v);
     out << json;
     
     return 0;
