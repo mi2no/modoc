@@ -1,10 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <cstdio>
-#include <unordered_set>
 #include <vector>
 #include <string_view>
-#include <iostream>
+#include <unordered_set>
+#include <unordered_map>
 
 #include "options.hpp"
 
@@ -94,7 +94,7 @@ struct text_node : node {
 
 struct node_factory {
     virtual node* instance(uint8_t nesting, const options_t&) = 0;
-    virtual node* deserialize(uint8_t depht, const char*) { return nullptr; }//= 0;
+    virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
     virtual void set_node_type_id(uint32_t) const = 0;
     virtual ~node_factory() = default;
 };
@@ -199,12 +199,15 @@ struct sec_f : node_factory {
         return new sec_node(id);
     }
     
-    node* deserialize(uint8_t depth, const char* json) override {
+    node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>& map) override {
         handle_depth(depth);
 
-        sec_node* s = new sec_node();
-        json::deserialize_value(*s, json);
-        s->set_id(id);
+        sec_node* s = new sec_node(id);
+
+        if (map.contains("title")) {
+            const char* ptr = map.at("title");
+            json::deserialize_value(s->title, ptr);
+        }
 
         return s;
     }
