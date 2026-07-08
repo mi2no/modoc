@@ -39,7 +39,11 @@ int main() {
     v[0].children.push_back({"sec", "Podsekcja 1"});
     v[0].children.push_back({"sec", "Podsekcja 2"});
 
-    const std::string json = json::serialize_value(v);
+    std::string json = json::serialize_value(v);
+
+    json.pop_back();
+    json += ",\"Hello world!\"]";
+
     out << json;
     
     return 0;

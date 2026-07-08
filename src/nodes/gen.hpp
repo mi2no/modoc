@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <string_view>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cstdint>
@@ -15,7 +16,13 @@ struct gen_node : special_node {
     uint8_t depth;
     std::string command;
 
-    gen_node(uint8_t depth, std::string_view command) : depth(depth), command(command) {}
+    enum mode_e : uint8_t {
+        JSON, MODOC
+    };
+
+    uint8_t mode;
+
+    gen_node(uint8_t depth, std::string_view command, uint8_t mode) : depth(depth), command(command), mode(mode) {}
 
 
     const char* type() const override {
@@ -48,7 +55,9 @@ struct gen_node : special_node {
 
     struct node_info {
         std::string type;
+        std::vector<std::string> tags;
         std::vector<node_info> children;
+        std::string text; // used if node is a text node
 
         std::unordered_map<std::string_view, const char*> json_map;
     };
@@ -92,7 +101,30 @@ public:
 
             while (stack.size()) {
                 xd* top = &stack.top(); 
-                node* curr = nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
+                node* curr = top->infos[top->ind].text.empty() ? nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map) : new text_node({top->infos[top->ind].text});
+
+                const node_info& info = top->infos[top->ind];
+                if (info.type.size() && nodes.contains(info.type)) {
+
+                }
+                else if (info.text.size()) {
+
+                }
+                else {
+                    while (++top->ind == top->infos.size()) {
+                        node* const parent = top->parent;
+                        stack.pop();
+
+                        if (stack.empty()) break;
+
+                        top = &stack.top();
+                        if (top->parent == nullptr) v.push_back(parent);
+                        else top->parent->add_node(parent);
+                    }
+                    continue;
+                }
+
+                // TODO: tokenize and string could be empty ("")
 
                 if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
                     if (top->parent == nullptr) v.push_back(curr);
@@ -122,7 +154,8 @@ public:
 
 struct gen_f : node_factory {
     node* instance(uint8_t depth, const options_t& op) override {
-        return new gen_node(depth, op.at("cmd").view);
+        if (op.contains("mode") && op.at("mode").view == "modoc") return new gen_node(depth, op.at("cmd").view, gen_node::MODOC);
+        else return new gen_node(depth, op.at("cmd").view, gen_node::JSON);
     }
 
     void set_node_type_id(uint32_t id) const override {
@@ -135,11 +168,18 @@ struct serializer<gen_node::node_info> {
     using self = gen_node::node_info;
     using fields = field_list<
         AUTO_FIELD(type),
+        AUTO_FIELD(tags),
         AUTO_FIELD(children)
     >;
 
     static void post_deserialize(self& info, std::unordered_map<std::string_view, const char*>& fields) {
         info.json_map = std::move(fields);
+    }
+
+    static self from_string(std::string_view view) {
+        self info;
+        info.text = view;
+        return info;
     }
 };
 
