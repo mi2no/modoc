@@ -44,12 +44,12 @@ int main() {
     json.pop_back();
     json += ",\"Hello world!\"]";
 
-    //out << json;
+    out << json;
     
-    out << "@sec Sekcja Modoc\n";
+    /*out << "@sec Sekcja Modoc\n";
     out << "\tHello world!\n";
     out << "\t@sec Inner\n";
-    out << "Bye\n";
+    out << "Bye\n";*/
     
     return 0;
 }

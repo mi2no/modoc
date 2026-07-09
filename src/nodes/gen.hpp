@@ -59,7 +59,9 @@ struct gen_node : special_node {
         std::string type;
         std::vector<std::string> tags;
         std::vector<node_info> children;
+        
         std::string text; // used if node is a text node
+        bool is_text = false;
 
         std::unordered_map<std::string_view, const char*> json_map;
     };
@@ -76,28 +78,31 @@ public:
         struct stat st;
         fstat(fd, &st);
 
-        char* json = new char[st.st_size + 1];
-        read(fd, json, st.st_size);
-        json[st.st_size] = '\0';
+        char* out = new char[st.st_size + 1];
+        read(fd, out, st.st_size);
+        out[st.st_size] = '\0';
 
         close(fd);
         unlink(path);
-
-        puts("[@gen] json:");
-        json::pretty_print(json);
 
         std::vector<node*> v;
         {
             switch (mode) {
                 case MODOC:
-                    return modoc::create_tree(json, depth);
+                    puts("[@gen] modoc:");
+                    puts(out);
+
+                    return modoc::create_tree(out, depth);
                 case JSON:
                 {
-                    const char* ptr = json;
+                    puts("[@gen] json:");
+                    json::pretty_print(out);
+
+                    const char* ptr = out;
                     std::vector<node_info> subtree;
                     json::deserialize_value(subtree, ptr);
 
-                    struct xd {
+                    struct xd { // TODO: change name
                         const std::vector<node_info>& infos;
                         size_t ind;
                         node* parent;
@@ -107,15 +112,20 @@ public:
                     stack.push({subtree, 0, nullptr});
 
                     while (stack.size()) {
-                        xd* top = &stack.top(); 
-                        node* curr = top->infos[top->ind].text.empty() ? nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map) : new text_node({top->infos[top->ind].text});
-
+                        xd* top = &stack.top();
                         const node_info& info = top->infos[top->ind];
-                        if (info.type.size() && nodes.contains(info.type)) {
+                        node* curr;
 
+                        if (info.is_text) {
+                            std::vector<std::string_view> tokens = modoc::tokenize(info.text);
+                            for (std::string_view sv : tokens) printf("%.*s\n", (int)sv.size(), sv.data());
+                            curr = new text_node(tokens);
                         }
-                        else if (info.text.size()) {
-
+                        else if (nodes.contains(info.type)) {
+                            curr = nodes[info.type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
+                        }
+                        else if (info.type.empty()) {
+                            curr = nodes["group"]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
                         }
                         else {
                             while (++top->ind == top->infos.size()) {
@@ -152,8 +162,8 @@ public:
                     }
                 }
 
-                delete[] json;
-                modoc::print_doc_tree(v);
+                delete[] out;
+                //modoc::print_doc_tree(v);
                 return v;
             }
         }
@@ -189,6 +199,7 @@ struct serializer<gen_node::node_info> {
     static self from_string(std::string_view view) {
         self info;
         info.text = view;
+        info.is_text = true;
         return info;
     }
 };

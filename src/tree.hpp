@@ -29,6 +29,27 @@ namespace modoc {
             }
     }
 
+    static std::vector<std::string_view> tokenize(std::string_view str) {
+        std::vector<std::string_view> tokens;
+        size_t token_begin;
+        bool token = false;
+
+        for (auto itr = str.begin(); itr != str.end(); ++itr) {
+            if (token && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
+                tokens.emplace_back(str.begin() + token_begin, itr);
+                token = false;
+            }
+            else if (!token) {
+                token = true;
+                token_begin = itr - str.begin();
+            }
+        }
+
+        if (token) tokens.emplace_back(str.begin() + token_begin, str.end());
+
+        return tokens;
+    }
+
     static bool primitives_only = true;
 
     static std::vector<node*> create_tree(const char* const& buffer, const uint8_t init_depth = 0) {
