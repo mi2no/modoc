@@ -8,6 +8,8 @@
 #include <cstdint>
 
 #include "../node.hpp"
+#include "../tree.hpp"
+
 #include "../../../serialize/serialize.hpp"
 
 struct gen_node : special_node {
@@ -86,67 +88,75 @@ public:
 
         std::vector<node*> v;
         {
-            const char* ptr = json;
-            std::vector<node_info> subtree;
-            json::deserialize_value(subtree, ptr);
+            switch (mode) {
+                case MODOC:
+                    return modoc::create_tree(json, depth);
+                case JSON:
+                {
+                    const char* ptr = json;
+                    std::vector<node_info> subtree;
+                    json::deserialize_value(subtree, ptr);
 
-            struct xd {
-                const std::vector<node_info>& infos;
-                size_t ind;
-                node* parent;
-            };
-            std::stack<xd> stack;
+                    struct xd {
+                        const std::vector<node_info>& infos;
+                        size_t ind;
+                        node* parent;
+                    };
+                    std::stack<xd> stack;
 
-            stack.push({subtree, 0, nullptr});
+                    stack.push({subtree, 0, nullptr});
 
-            while (stack.size()) {
-                xd* top = &stack.top(); 
-                node* curr = top->infos[top->ind].text.empty() ? nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map) : new text_node({top->infos[top->ind].text});
+                    while (stack.size()) {
+                        xd* top = &stack.top(); 
+                        node* curr = top->infos[top->ind].text.empty() ? nodes[top->infos[top->ind].type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map) : new text_node({top->infos[top->ind].text});
 
-                const node_info& info = top->infos[top->ind];
-                if (info.type.size() && nodes.contains(info.type)) {
+                        const node_info& info = top->infos[top->ind];
+                        if (info.type.size() && nodes.contains(info.type)) {
 
-                }
-                else if (info.text.size()) {
+                        }
+                        else if (info.text.size()) {
 
-                }
-                else {
-                    while (++top->ind == top->infos.size()) {
-                        node* const parent = top->parent;
-                        stack.pop();
+                        }
+                        else {
+                            while (++top->ind == top->infos.size()) {
+                                node* const parent = top->parent;
+                                stack.pop();
 
-                        if (stack.empty()) break;
+                                if (stack.empty()) break;
 
-                        top = &stack.top();
-                        if (top->parent == nullptr) v.push_back(parent);
-                        else top->parent->add_node(parent);
+                                top = &stack.top();
+                                if (top->parent == nullptr) v.push_back(parent);
+                                else top->parent->add_node(parent);
+                            }
+                            continue;
+                        }
+
+                        // TODO: tokenize and string could be empty ("")
+
+                        if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
+                            if (top->parent == nullptr) v.push_back(curr);
+                            else top->parent->add_node(curr);
+
+                            while (++top->ind == top->infos.size()) {
+                                node* const parent = top->parent;
+                                stack.pop();
+
+                                if (stack.empty()) break;
+
+                                top = &stack.top();
+                                if (top->parent == nullptr) v.push_back(parent);
+                                else top->parent->add_node(parent);
+                            }
+                        }
+                        else stack.push({top->infos[top->ind].children, 0, curr});
                     }
-                    continue;
                 }
 
-                // TODO: tokenize and string could be empty ("")
-
-                if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
-                    if (top->parent == nullptr) v.push_back(curr);
-                    else top->parent->add_node(curr);
-
-                    while (++top->ind == top->infos.size()) {
-                        node* const parent = top->parent;
-                        stack.pop();
-
-                        if (stack.empty()) break;
-
-                        top = &stack.top();
-                        if (top->parent == nullptr) v.push_back(parent);
-                        else top->parent->add_node(parent);
-                    }
-                }
-                else stack.push({top->infos[top->ind].children, 0, curr});
+                delete[] json;
+                modoc::print_doc_tree(v);
+                return v;
             }
         }
-
-        delete[] json;
-        return v;
     }
 
     ~gen_node() override = default;
