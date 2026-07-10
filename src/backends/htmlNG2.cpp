@@ -83,7 +83,7 @@ std::string node_to_str(const node* n) {
 
         result += "</div>\n</div>\n";
     }
-    else {
+    else if (node::is_type<text_node>(n)) {
         text_node* t = (text_node*)n;
 
         for (std::string_view sv : t->tokens) {

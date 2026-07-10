@@ -20,7 +20,7 @@ A node can take in options in the form of a list:
 ```
 This is optional.
 
-### Attributes
+### Tags
 A node can be assigned tags - for styling:
 ```
 @node(tag1, tag2)

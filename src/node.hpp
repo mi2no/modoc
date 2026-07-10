@@ -1,10 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <cstdio>
-#include <unordered_set>
 #include <vector>
 #include <string_view>
-#include <iostream>
+#include <unordered_set>
+#include <unordered_map>
 
 #include "options.hpp"
 
@@ -34,11 +34,24 @@ struct node {
     virtual bool verbatim() const {
         return false;
     }
+
+    virtual bool is_primitive() const {
+        return true;
+    }
     
     virtual ~node() = default;
 };
 
+struct special_node : node {
+    virtual std::vector<node*> expand() const = 0;
+
+    bool is_primitive() const override final {
+        return false;
+    }
+};
+
 struct text_node : node {
+    static uint32_t t_id;
 
     std::vector<std::string_view> tokens{};
 
@@ -54,7 +67,7 @@ struct text_node : node {
 
 
     virtual uint32_t type_id() const override {
-        return 0;
+        return t_id;
     }
 
 
@@ -81,11 +94,12 @@ struct text_node : node {
 
 struct node_factory {
     virtual node* instance(uint8_t nesting, const options_t&) = 0;
+    virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
     virtual void set_node_type_id(uint32_t) const = 0;
     virtual ~node_factory() = default;
 };
 
-bool debug_str_match(const char* a, const char* b) {
+static bool debug_str_match(const char* a, const char* b) {
     while (*a != '\0' && *b != '\0')
         if (*a++ != *b++) return false;
     return true;
@@ -97,10 +111,19 @@ struct sec_node : node {
     std::vector<node*> nodes;
     std::string title;
 
-    uint8_t* id;
-    uint8_t id_size;
+    uint8_t* id = nullptr;
+    uint8_t id_size = 0;
 
     sec_node(std::vector<uint8_t> id_v) {
+        id_size = id_v.size();
+        id = new uint8_t[id_size];
+
+        for (uint8_t i = 0; i < id_size; ++i)
+            id[i] = id_v[i];
+    }
+
+    sec_node() = default; // TODO: temp
+    void set_id(std::vector<uint8_t> id_v) { // TODO: temp
         id_size = id_v.size();
         id = new uint8_t[id_size];
 
@@ -145,7 +168,7 @@ struct sec_node : node {
 
 
     void debug_print() const override {
-        printf("%hhu", id[0]);
+        if (id != nullptr) printf("%hhu", id[0]);
         for (uint8_t i = 1; i < id_size; ++i)
             printf(".%hhu", id[i]);
         putchar(' ');
@@ -153,15 +176,15 @@ struct sec_node : node {
     }
 
     ~sec_node() override {
-        delete[] id;
+        if (id != nullptr) delete[] id;
     }
 };
 
 struct sec_f : node_factory {
     std::vector<uint8_t> id;
 
-    node* instance(uint8_t nesting, const options_t&) override {
-        const uint8_t sec_depth = nesting + 1;
+    void handle_depth(uint8_t depth) {
+        const uint8_t sec_depth = depth + 1;
 
         if (sec_depth > id.size()) id.push_back(0u);
         else {
@@ -169,13 +192,37 @@ struct sec_f : node_factory {
         }
 
         ++id.back();
+    }
 
+    node* instance(uint8_t nesting, const options_t&) override {
+        handle_depth(nesting);
         return new sec_node(id);
+    }
+    
+    node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>& map) override {
+        handle_depth(depth);
+
+        sec_node* s = new sec_node(id);
+
+        if (map.contains("title")) {
+            const char* ptr = map.at("title");
+            json::deserialize_value(s->title, ptr);
+        }
+
+        return s;
     }
 
     void set_node_type_id(uint32_t id) const override {
         sec_node::t_id = id;
     }
+};
+    
+template <>
+struct serializer<sec_node> {
+    using self = sec_node;
+    using fields = field_list<
+        AUTO_FIELD(title)
+    >;
 };
 
 struct list_node : node {
@@ -306,6 +353,9 @@ struct code_f : node_factory {
     }
 };
 
+uint32_t text_node::t_id = 0;
 uint32_t sec_node::t_id = 0;
 uint32_t list_node::t_id = 0;
 uint32_t code_node::t_id = 0;
+
+static std::unordered_map<std::string_view, node_factory*> nodes;
