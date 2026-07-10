@@ -69,10 +69,10 @@ struct gen_node : special_node {
 public:
 
     std::vector<node*> expand() const override {
-        char path[] = "tmp_json_XXXXXX";
+        char path[] = "tmp_modoc_outXXXXXX";
         int fd = mkstemp(path);
 
-        const std::string env_cmd = std::string("MODOC_JSON_FILE='") + path + "' " + command;
+        const std::string env_cmd = std::string("MODOC_OUTPUT_FILE='") + path + "' " + command;
         system(env_cmd.c_str());
 
         struct stat st;
@@ -86,87 +86,86 @@ public:
         unlink(path);
 
         std::vector<node*> v;
-        {
-            switch (mode) {
-                case MODOC:
-                    puts("[@gen] modoc:");
-                    puts(out);
+        switch (mode) {
+            case MODOC:
+                puts("[@gen] modoc:");
+                puts(out);
 
-                    return modoc::create_tree(out, depth);
-                case JSON:
-                {
-                    puts("[@gen] json:");
-                    json::pretty_print(out);
+                return modoc::create_tree(out, depth);
+            case JSON:
+            {
+                puts("[@gen] json:");
+                json::pretty_print(out);
 
-                    const char* ptr = out;
-                    std::vector<node_info> subtree;
-                    json::deserialize_value(subtree, ptr);
+                const char* ptr = out;
+                std::vector<node_info> subtree;
+                json::deserialize_value(subtree, ptr);
 
-                    struct xd { // TODO: change name
-                        const std::vector<node_info>& infos;
-                        size_t ind;
-                        node* parent;
-                    };
-                    std::stack<xd> stack;
+                struct node_tree_itr { // TODO: change name
+                    const std::vector<node_info>& infos;
+                    size_t ind;
+                    node* parent;
+                };
+                std::stack<node_tree_itr> stack;
 
-                    stack.push({subtree, 0, nullptr});
+                stack.push({subtree, 0, nullptr});
 
-                    while (stack.size()) {
-                        xd* top = &stack.top();
-                        const node_info& info = top->infos[top->ind];
-                        node* curr;
+                while (stack.size()) {
+                    node_tree_itr* top = &stack.top();
+                    const node_info& info = top->infos[top->ind];
+                    node* curr;
 
-                        if (info.is_text) {
-                            std::vector<std::string_view> tokens = modoc::tokenize(info.text);
-                            for (std::string_view sv : tokens) printf("%.*s\n", (int)sv.size(), sv.data());
-                            curr = new text_node(tokens);
-                        }
-                        else if (nodes.contains(info.type)) {
-                            curr = nodes[info.type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
-                        }
-                        else if (info.type.empty()) {
-                            curr = nodes["group"]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
-                        }
-                        else {
-                            while (++top->ind == top->infos.size()) {
-                                node* const parent = top->parent;
-                                stack.pop();
-
-                                if (stack.empty()) break;
-
-                                top = &stack.top();
-                                if (top->parent == nullptr) v.push_back(parent);
-                                else top->parent->add_node(parent);
-                            }
-                            continue;
-                        }
-
-                        // TODO: tokenize and string could be empty ("")
-
-                        if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
-                            if (top->parent == nullptr) v.push_back(curr);
-                            else top->parent->add_node(curr);
-
-                            while (++top->ind == top->infos.size()) {
-                                node* const parent = top->parent;
-                                stack.pop();
-
-                                if (stack.empty()) break;
-
-                                top = &stack.top();
-                                if (top->parent == nullptr) v.push_back(parent);
-                                else top->parent->add_node(parent);
-                            }
-                        }
-                        else stack.push({top->infos[top->ind].children, 0, curr});
+                    if (info.is_text) {
+                        std::vector<std::string_view> tokens = modoc::tokenize(info.text);
+                        //for (std::string_view sv : tokens) printf("%.*s\n", (int)sv.size(), sv.data());
+                        curr = new text_node(tokens);
                     }
-                }
+                    else if (nodes.contains(info.type)) {
+                        curr = nodes[info.type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
+                    }
+                    else if (info.type.empty()) {
+                        curr = nodes["group"]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);
+                    }
+                    else {
+                        while (++top->ind == top->infos.size()) {
+                            node* const parent = top->parent;
+                            stack.pop();
 
-                delete[] out;
-                //modoc::print_doc_tree(v);
-                return v;
+                            if (stack.empty()) break;
+
+                            top = &stack.top();
+                            if (top->parent == nullptr) v.push_back(parent);
+                            else top->parent->add_node(parent);
+                        }
+                        continue;
+                    }
+
+                    if (top->infos[top->ind].children.empty() || curr->child_nodes() == nullptr) { // Doesn't have or expect child nodes
+                        if (top->parent == nullptr) v.push_back(curr);
+                        else top->parent->add_node(curr);
+
+                        while (++top->ind == top->infos.size()) {
+                            node* const parent = top->parent;
+                            stack.pop();
+
+                            if (stack.empty()) break;
+
+                            top = &stack.top();
+                            if (top->parent == nullptr) v.push_back(parent);
+                            else top->parent->add_node(parent);
+                        }
+                    }
+                    else stack.push({top->infos[top->ind].children, 0, curr});
+                }
             }
         }
+
+        delete[] out;
+
+        puts("Evaluated subtree:");
+        modoc::print_doc_tree(v);
+
+        return v;
     }
 
     ~gen_node() override = default;

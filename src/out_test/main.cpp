@@ -22,7 +22,7 @@ struct serializer<sec_node> {
 };
 
 int main() {
-    const char* path = std::getenv("MODOC_JSON_FILE");
+    const char* path = std::getenv("MODOC_OUTPUT_FILE");
 
     if (!path) {
         std::cerr << "MY_OUTPUT_FILE not set\n";
