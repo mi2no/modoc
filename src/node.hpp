@@ -6,7 +6,8 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#include "options.hpp"
+//#include "options.hpp"
+#include "value.hpp"
 
 enum scope_end : uint8_t {
     START, ENDL, ENDSCP
@@ -345,7 +346,7 @@ struct code_node : node {
 
 struct code_f : node_factory {
     node* instance(uint8_t, const options_t& op) override {
-        return new code_node((std::string)op.at("lang").view);
+        return new code_node((std::string)op.at("lang").string());
     }
 
     void set_node_type_id(uint32_t id) const override {

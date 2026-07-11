@@ -72,7 +72,7 @@ public:
         char path[] = "tmp_modoc_outXXXXXX";
         int fd = mkstemp(path);
 
-        const std::string env_cmd = std::string("MODOC_OUTPUT_FILE='") + path + "' " + command;
+        const std::string env_cmd = std::string("MODOC_OUTPUT_FILE='") + path + "';" + command;
         system(env_cmd.c_str());
 
         struct stat st;
@@ -173,8 +173,8 @@ public:
 
 struct gen_f : node_factory {
     node* instance(uint8_t depth, const options_t& op) override {
-        if (op.contains("mode") && op.at("mode").view == "modoc") return new gen_node(depth, op.at("cmd").view, gen_node::MODOC);
-        else return new gen_node(depth, op.at("cmd").view, gen_node::JSON);
+        if (op.contains("mode") && op.at("mode").string() == "modoc") return new gen_node(depth, op.at("cmd").string(), gen_node::MODOC);
+        else return new gen_node(depth, op.at("cmd").string(), gen_node::JSON);
     }
 
     void set_node_type_id(uint32_t id) const override {

@@ -6,12 +6,14 @@
 #include <cstdint>
 
 #include "node.hpp"
+#include "value.hpp"
 
 namespace modoc {
 
     constexpr char KEYWORD_CHAR = '@';
 
-    static std::map<std::string_view, object> options;
+    //static std::map<std::string_view, object> options;
+    static options_t options;
 
     static void put_tokens(std::string& s, const std::vector<std::string_view>& tokens, const uint8_t& nest = 0) {
         for (size_t i = 0; i < tokens.size(); ++i) {
@@ -86,7 +88,7 @@ namespace modoc {
             while (buffer[i] != '\0') {
                 if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
                     end = i;
-                    size_t x = get_options(buffer + i + 1, options);
+                    size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
                     i += x;
                     printf("Read %zu\n", x);
                 }

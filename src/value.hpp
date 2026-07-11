@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdlib>
 #include <cstring>
 #include <string_view>
@@ -13,7 +15,7 @@ struct value {
     };
 
     struct string_data {
-        const char* ptr;
+        char* ptr;
         size_t size;
         bool copy;
     }; // No terminating char at string end ('\0')!
@@ -68,6 +70,60 @@ struct value {
     }
 
 
+    void parse_string(const char* str, const char** end = nullptr) {
+        char* ptr = (char*)str;
+        uint32_t escape_chars = 0;
+        bool slash = false;
+
+        while (*++ptr != '"' || slash) {
+            if (*ptr == '\\' && !slash) slash = true;
+            else if (slash && (*ptr == 'n' || *ptr == '"' || *ptr == 't' || *ptr == '\\')) {
+                slash = false;
+                ++escape_chars;
+            }
+        }
+        
+        size_t size = ptr - str - 1;
+
+        if (escape_chars) {
+            data.string.size = size - escape_chars;
+            ptr = data.string.ptr = new char[data.string.size];
+            data.string.copy = true;
+            slash = false;
+
+            while (*++str != '"' || escape_chars) {
+                if (*str == '\\' && !slash) slash = true;
+                else if (slash) {
+                    switch (*str) {
+                        case 'n':
+                            *ptr = '\n';
+                            break;
+                        case '"':
+                            *ptr = '"';
+                            break;
+                        case 't':
+                            *ptr = '\t';
+                            break;
+                        case '\\':
+                            *ptr = '\\';
+                            break;
+                    }                    
+                    slash = false;
+                    --escape_chars;
+                    ++ptr;
+                }
+                else *ptr++ = *str;
+            }
+        }
+        else {
+            data.string.ptr = (char*)str + 1;
+            data.string.size = size;
+            data.string.copy = false;
+            str = ptr;
+        }
+
+        if (end != nullptr) *end = str;
+    }
 
     static value _parse(const char*& str) {
         value result;
@@ -76,9 +132,8 @@ struct value {
 
         if (str[0] == '"') {
             result.type = STRING;
-            result.data.string = {++str, 0, false};
-
-            while (*str++ != '"') ++result.data.string.size;
+            result.parse_string(str, &str);
+            ++str;
         }
         else if (str[0] == '[') {
             result.type = LIST;
@@ -162,10 +217,12 @@ struct value {
 
 typedef std::map<std::string_view, value> options_t;
 
-static void parse_options(const char* ptr, options_t& ops) {
+static size_t parse_options(const char* ptr, options_t& ops) {
     std::string_view option;
     const char* begin = nullptr;
     bool is_value = false;
+
+    const char* const b = ptr;
 
     ++ptr;
     while (*ptr != ']' && *ptr != '\0') {
@@ -186,4 +243,33 @@ static void parse_options(const char* ptr, options_t& ops) {
         }
         ++ptr;
     }
+
+    return ptr - b;
 }
+
+/*void print_value(const value& v) {
+    switch ((uint8_t)v.type) {
+        case value::BOOLEAN:
+            std::cout << (v.boolean() ? "true" : "false");
+            break;
+        case value::NUMBER:
+            std::cout << v.number();
+            break;
+        case value::STRING:
+            std::cout << '"' << v.string() << '"';
+            break;
+        case value::LIST:
+            {
+                std::cout << '[';
+                std::span<value> s = v.list();
+                for (size_t i = 0; i < s.size(); ++i) {
+                    print_value(s[i]);
+                    if (i != s.size() - 1) std::cout << ", ";
+                }
+                std::cout << ']';
+            }
+            break;
+        case value::NONE:
+            std::cout << "null";
+    }
+}*/
