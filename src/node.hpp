@@ -2,12 +2,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include <string>
 #include <string_view>
 #include <unordered_set>
 #include <unordered_map>
 
 //#include "options.hpp"
 #include "value.hpp"
+
+#include "../../serialize/serialize.hpp"
 
 enum scope_end : uint8_t {
     START, ENDL, ENDSCP
@@ -331,6 +334,9 @@ struct code_node : node {
         }
     }
 
+    virtual void debug_print() const override {
+        printf("[code](lang = %s)\n", lang.c_str());
+    }
 
     const std::vector<node*>* child_nodes() const override {
         return nullptr;

@@ -2,11 +2,17 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
 #include <string_view>
 #include <span>
 #include <map>
+#include <unordered_map>
 
-#include "../../serialize/serialize.hpp"
+#include <cstdio> //////
+
+struct value;
+
+static std::unordered_map<std::string_view, value> constants;
 
 struct value {
 
@@ -37,6 +43,14 @@ struct value {
     type_e type = NONE;
 
     value() = default;
+
+    value(std::string_view str) {
+        type = STRING;
+        data.string.size = str.size();
+        data.string.ptr = new char[data.string.size];
+        data.string.copy = true;
+        memcpy(data.string.ptr, str.data(), data.string.size);
+    }
 
     // Copy constructor
     value(const value& v) {
@@ -181,7 +195,18 @@ struct value {
                 result.type = NUMBER;
                 result.data.number = num;
                 str = end;
+                return result;
             }
+
+            end = (char*)str;
+            while (*end > ' ' && *end != ',' && *end != ']') ++end;
+            printf("const: %.*s\n", (int)(end - str), str);
+
+            std::string_view constant = {str, end};
+            str = end;
+
+            if (constants.contains(constant))
+                result = constants.at(constant);
 
             //TODO: check if is a static const
         }
@@ -245,6 +270,10 @@ static size_t parse_options(const char* ptr, options_t& ops) {
     }
 
     return ptr - b;
+}
+
+static void register_constant(std::string_view name, const value& v) {
+    constants[name] = v;
 }
 
 /*void print_value(const value& v) {

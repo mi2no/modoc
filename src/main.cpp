@@ -19,7 +19,6 @@
 // Nodes
 #include "nodes/gen.hpp"
 
-std::unordered_set<std::string> dependecies;
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
     size_t begin = ++i, p_begin = 0, p_end = 0;
@@ -72,6 +71,7 @@ void register_node_factory(const char* sym, node_factory* nf) {
     nf->set_node_type_id(type_id_itr++);
     nodes[sym] = nf;
 }
+
 
 void destroy_node(node* n) {
     const std::vector<node*>* children = n->child_nodes();
@@ -171,6 +171,8 @@ int main(int argc, char** argv) {
     register_node_factory("list", new list_f());
     register_node_factory("code", new code_f());
     register_node_factory("gen", new gen_f());
+
+    register_constant("code.lang.cpp", {"cpp"});
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);
