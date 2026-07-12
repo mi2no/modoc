@@ -173,6 +173,8 @@ int main(int argc, char** argv) {
     register_node_factory("gen", new gen_f());
 
     register_constant("code.lang.cpp", {"cpp"});
+    register_constant("gen.mode.modoc", {gen_node::MODOC});
+    register_constant("gen.mode.json", {gen_node::JSON});
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);

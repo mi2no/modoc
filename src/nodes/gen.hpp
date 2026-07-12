@@ -173,8 +173,11 @@ public:
 
 struct gen_f : node_factory {
     node* instance(uint8_t depth, const options_t& op) override {
-        if (op.contains("mode") && op.at("mode").string() == "modoc") return new gen_node(depth, op.at("cmd").string(), gen_node::MODOC);
-        else return new gen_node(depth, op.at("cmd").string(), gen_node::JSON);
+        if (op.contains("mode")) {
+            const value v = op.at("mode");
+            if (v.type == value::NUMBER) return new gen_node(depth, op.at("cmd").string(), v.number());
+        }
+        return nullptr;
     }
 
     void set_node_type_id(uint32_t id) const override {

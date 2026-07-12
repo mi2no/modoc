@@ -44,6 +44,11 @@ struct value {
 
     value() = default;
 
+    value(double num) {
+        type = NUMBER;
+        data.number = num;
+    }
+
     value(std::string_view str) {
         type = STRING;
         data.string.size = str.size();
