@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <span>
 #include <map>
@@ -239,6 +240,30 @@ struct value {
         return {data.list.ptr, data.list.ptr + data.list.size};
     }
 
+
+    std::string to_string() const {
+        switch ((uint8_t)type) {
+            case value::BOOLEAN:
+                return (boolean() ? "true" : "false");
+            case value::NUMBER:
+                return std::to_string(number());
+            case value::STRING:
+                return /*'"'*/std::string{string()} /*'"'*/;
+            case value::LIST:
+                {
+                    std::string result = "[";
+                    std::span<value> s = list();
+                    for (size_t i = 0; i < s.size(); ++i) {
+                        result += s[i].to_string();
+                        if (i != s.size() - 1) result += ", ";
+                    }
+                    result += ']';
+                    return result;
+                }
+        }
+        return "null";
+    }
+
     ~value() {
         if (type == LIST) delete[] data.list.ptr;
         else if (type == STRING && data.string.copy) delete[] data.string.ptr;
@@ -277,33 +302,12 @@ static size_t parse_options(const char* ptr, options_t& ops) {
     return ptr - b;
 }
 
+static std::string evaluate(const char* str, const char** end) {
+    const value v = value::_parse(str);
+    if (end != nullptr) *end = str;
+    return v.to_string();
+}
+
 static void register_constant(std::string_view name, const value& v) {
     constants[name] = v;
 }
-
-/*void print_value(const value& v) {
-    switch ((uint8_t)v.type) {
-        case value::BOOLEAN:
-            std::cout << (v.boolean() ? "true" : "false");
-            break;
-        case value::NUMBER:
-            std::cout << v.number();
-            break;
-        case value::STRING:
-            std::cout << '"' << v.string() << '"';
-            break;
-        case value::LIST:
-            {
-                std::cout << '[';
-                std::span<value> s = v.list();
-                for (size_t i = 0; i < s.size(); ++i) {
-                    print_value(s[i]);
-                    if (i != s.size() - 1) std::cout << ", ";
-                }
-                std::cout << ']';
-            }
-            break;
-        case value::NONE:
-            std::cout << "null";
-    }
-}*/

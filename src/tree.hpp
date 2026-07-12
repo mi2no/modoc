@@ -6,11 +6,13 @@
 #include <cstdint>
 
 #include "node.hpp"
+#include "string_type.hpp"
 #include "value.hpp"
 
 namespace modoc {
 
     constexpr char KEYWORD_CHAR = '@';
+    constexpr char EVALUATE_CHAR = '$';
 
     //static std::map<std::string_view, object> options;
     static options_t options;
@@ -61,7 +63,7 @@ namespace modoc {
         bool word = false;
         //std::stack<keyword_instance*> stack;
         std::stack<node*> stack;
-        std::vector<std::string_view> tokens;
+        std::vector<modoc::string_type> tokens;
 
         for (size_t i = 0; buffer[i] != '\0'; ++i) {
             size_t tabs = 0;
@@ -86,7 +88,15 @@ namespace modoc {
             
             // Line
             while (buffer[i] != '\0') {
-                if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
+                if (buffer[i] == EVALUATE_CHAR) {
+                    ++i; // Skip EVALUATE_CHAR
+                    const char* end = buffer + i;
+                    const std::string result = evaluate(end, &end);
+                    
+                    //tokens.emplace_back(result);
+                    i = end - buffer;
+                }
+                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
                     end = i;
                     size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
                     i += x;
@@ -141,10 +151,10 @@ namespace modoc {
                                 }
                             }
                             //else result.append(buffer + begin, end - begin);
-                            else tokens.push_back({buffer + begin, end - begin});
+                            else tokens.push_back({{buffer + begin, end - begin}, false});
                         }
                         else {
-                            tokens.push_back({buffer + begin, end - begin});
+                            tokens.push_back({{buffer + begin, end - begin}, false});
                             //result.append(buffer + begin, end - begin);
                         }
                     }
