@@ -47,7 +47,7 @@ struct gen_node : special_node {
 
     void add_node(node*) override {}
 
-    void parse_tokens(const std::vector<std::string_view>&, uint8_t) override {}
+    void parse_tokens(std::vector<modoc::string_type>&&, uint8_t) override {}
 
     void debug_print() const override {
         printf("[%s](cmd = %s)\n", type(), command.c_str());
@@ -116,9 +116,9 @@ public:
                     node* curr;
 
                     if (info.is_text) {
-                        std::vector<std::string_view> tokens = modoc::tokenize(info.text);
+                        std::vector<modoc::string_type> tokens = modoc::tokenize(info.text);
                         //for (std::string_view sv : tokens) printf("%.*s\n", (int)sv.size(), sv.data());
-                        curr = new text_node(tokens);
+                        curr = new text_node(std::move(tokens));
                     }
                     else if (nodes.contains(info.type)) {
                         curr = nodes[info.type]->deserialize(depth + stack.size() - 1, top->infos[top->ind].json_map);

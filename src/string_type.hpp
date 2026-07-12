@@ -11,6 +11,12 @@ namespace modoc {
 
     public:
 
+        string_type() {
+            ptr = nullptr;
+            size = 0;
+            owned = false;
+        }
+
         string_type(std::string_view view, bool own) : size(view.size()), owned(own) {
             if (own) {
                 char* temp = new char[size];
@@ -27,6 +33,17 @@ namespace modoc {
             size = s.size;
             owned = s.owned;
             s.owned = false;
+        }
+
+        string_type& operator=(string_type&& s) {
+            if (owned) delete[] ptr;
+
+            ptr = s.ptr;
+            size = s.size;
+            owned = s.owned;
+            s.owned = false;
+
+            return *this;
         }
 
         std::string_view view() const {

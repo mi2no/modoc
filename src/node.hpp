@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 //#include "options.hpp"
+#include "string_type.hpp"
 #include "value.hpp"
 
 #include "../../serialize/serialize.hpp"
@@ -29,7 +30,7 @@ struct node {
 
     virtual const std::vector<node*>* child_nodes() const = 0;
     virtual void add_node(node*) = 0;
-    virtual void parse_tokens(const std::vector<std::string_view>&, uint8_t tabs) = 0;
+    virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
 
     virtual void debug_print() const {
         printf("[%s]\n", type());
@@ -57,16 +58,16 @@ struct special_node : node {
 struct text_node : node {
     static uint32_t t_id;
 
-    std::vector<std::string_view> tokens{};
+    std::vector<modoc::string_type> tokens{};
 
-    text_node(const std::vector<std::string_view>& tokens) {
-        this->tokens = tokens;
+    text_node(std::vector<modoc::string_type>&& tokens) {
+        this->tokens = std::move(tokens);
     }
 
-    text_node(const std::vector<std::string_view>& tokens, uint16_t offset) {
+    text_node(std::vector<modoc::string_type>&& tokens, uint16_t offset) {
         this->tokens.resize(tokens.size() - offset);
         for (uint16_t i = offset, j = 0; i < tokens.size(); ++i, ++j)
-            this->tokens[j] = tokens[i];
+            this->tokens[j] = std::move(tokens[i]);
     }
 
 
@@ -83,9 +84,9 @@ struct text_node : node {
         return scope_end::ENDSCP;
     }
 
-    void parse_tokens(const std::vector<std::string_view>& new_tokens, uint8_t) override {
+    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t) override {
         tokens.reserve(tokens.size() + new_tokens.size());
-        for (const std::string_view& s : new_tokens) tokens.push_back(s);
+        for (modoc::string_type& s : new_tokens) tokens.push_back(std::move(s));
     }
 
 
@@ -152,18 +153,18 @@ struct sec_node : node {
         return &nodes;
     }
 
-    void parse_tokens(const std::vector<std::string_view>& new_tokens, uint8_t tabs) override {
+    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         if (title.empty()) {
-            title = new_tokens[0];
+            title = new_tokens[0].view();
             for (size_t i = 1; i < new_tokens.size(); ++i) {
                 title += ' ';
-                title += new_tokens[i];
+                title += new_tokens[i].view();
             }
         }
         else if (nodes.size() && debug_str_match(nodes.back()->type(), "text"))
-            nodes.back()->parse_tokens(new_tokens, tabs);
+            nodes.back()->parse_tokens(std::move(new_tokens), tabs);
         else
-            nodes.push_back(new text_node(new_tokens));
+            nodes.push_back(new text_node(std::move(new_tokens)));
     }
 
     void add_node(node* n) override {
@@ -252,17 +253,19 @@ struct list_node : node {
         return &nodes;
     }
 
-    void parse_tokens(const std::vector<std::string_view>& new_tokens, uint8_t tabs) override {
-        if (nodes.empty() && new_tokens[0][0] != '-') nodes.push_back(new text_node(new_tokens));
-        else if (new_tokens[0][0] == '-') {
-            if (new_tokens[0].size() > 1) {
-                text_node* t = new text_node(new_tokens);
-                t->tokens[0] = {t->tokens[0].data() + 1, t->tokens[0].length() - 1};
+    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
+        std::string_view first = new_tokens[0].view();
+        if (nodes.empty() && first[0] != '-') nodes.push_back(new text_node(std::move(new_tokens)));
+        else if (first[0] == '-') {
+            if (first.size() > 1) {
+                text_node* t = new text_node(std::move(new_tokens));
+                first = t->tokens[0].view();
+                t->tokens[0] = {{first.data() + 1, first.length() - 1}, false};
                 nodes.push_back(t);
             }
-            else nodes.push_back(new text_node(new_tokens, 1));
+            else nodes.push_back(new text_node(std::move(new_tokens), 1));
         }
-        else nodes.back()->parse_tokens(new_tokens, tabs);
+        else nodes.back()->parse_tokens(std::move(new_tokens), tabs);
     }
 
     void add_node(node* n) override {
@@ -310,7 +313,7 @@ struct code_node : node {
         return scope_end::ENDSCP;
     }
 
-    void parse_tokens(const std::vector<std::string_view>& new_tokens, uint8_t tabs) override {
+    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         static const std::unordered_set<std::string> types {"char", "short", "int", "long"};
         static const std::unordered_set<std::string> keywords {"if", "else", "return", "throw"};
 
@@ -323,9 +326,9 @@ struct code_node : node {
             tokens.push_back(t);
         }
 
-        for (const std::string_view& s : new_tokens) {
+        for (const modoc::string_type& s : new_tokens) {
             token_t t;
-            t.str = s;
+            t.str = s.view();
 
             if (types.contains(t.str)) t.type = TYPE;
             else if (keywords.contains(t.str)) t.type = KEYWORD;

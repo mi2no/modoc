@@ -33,14 +33,14 @@ namespace modoc {
             }
     }
 
-    static std::vector<std::string_view> tokenize(std::string_view str) {
-        std::vector<std::string_view> tokens;
+    static std::vector<modoc::string_type> tokenize(std::string_view str) { // TODO: add evaluation (EVALUATE_CHAR)
+        std::vector<modoc::string_type> tokens;
         size_t token_begin;
         bool token = false;
 
         for (auto itr = str.begin(); itr != str.end(); ++itr) {
             if (token && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
-                tokens.emplace_back(str.begin() + token_begin, itr);
+                tokens.emplace_back(std::string_view{str.begin() + token_begin, itr}, false);
                 token = false;
             }
             else if (!token) {
@@ -49,7 +49,7 @@ namespace modoc {
             }
         }
 
-        if (token) tokens.emplace_back(str.begin() + token_begin, str.end());
+        if (token) tokens.emplace_back(std::string_view{str.begin() + token_begin, str.end()}, false);
 
         return tokens;
     }
@@ -74,7 +74,7 @@ namespace modoc {
             while (tabs < stack.size()) {
                 if (tokens.size()) {
                     //result += stack.top()->format(tokens, dependecies);
-                    stack.top()->parse_tokens(tokens, 0);
+                    stack.top()->parse_tokens(std::move(tokens), 0);
 
                     tokens.clear();
                 }
@@ -93,7 +93,7 @@ namespace modoc {
                     const char* end = buffer + i;
                     const std::string result = evaluate(end, &end);
                     
-                    //tokens.emplace_back(result);
+                    tokens.emplace_back(result, true);
                     i = end - buffer;
                 }
                 else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
@@ -118,8 +118,8 @@ namespace modoc {
                                 if (tokens.size()) {
                                     //if (stack.size()) result += stack.top()->format(tokens, dependecies);
                                     //else put_tokens(result, tokens);
-                                    if (stack.size()) stack.top()->parse_tokens(tokens, (stack.size() < tabs) * (tabs - stack.size()));
-                                    else result.push_back(new text_node(tokens));
+                                    if (stack.size()) stack.top()->parse_tokens(std::move(tokens), (stack.size() < tabs) * (tabs - stack.size()));
+                                    else result.push_back(new text_node(std::move(tokens)));
 
                                     tokens.clear();
                                 }
@@ -172,7 +172,7 @@ namespace modoc {
                 if (tokens.size()/* > 1*/) {
                     //tokens.pop_back(); // remove \n -> std::stringview{nullptr, 0} token
                     //result += stack.top()->format(tokens, dependecies);
-                    stack.top()->parse_tokens(tokens, (stack.size() < tabs) * (tabs - stack.size()));
+                    stack.top()->parse_tokens(std::move(tokens), (stack.size() < tabs) * (tabs - stack.size()));
                     tokens.clear();
                 }
 
@@ -200,7 +200,7 @@ namespace modoc {
         while (stack.size()) {
     if (tokens.size()) {
                 //result += stack.top()->format(tokens, dependecies);
-                stack.top()->parse_tokens(tokens, 0);
+                stack.top()->parse_tokens(std::move(tokens), 0);
                 tokens.clear();
             }
 
@@ -211,7 +211,7 @@ namespace modoc {
         }
 
         //put_tokens(result, tokens);
-        if (tokens.size()) result.push_back(new text_node(tokens));
+        if (tokens.size()) result.push_back(new text_node(std::move(tokens)));
 
         return result;
     }
