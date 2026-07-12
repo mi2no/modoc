@@ -88,7 +88,7 @@ namespace modoc {
             
             // Line
             while (buffer[i] != '\0') {
-                if (buffer[i] == EVALUATE_CHAR) {
+                if ((stack.empty() || !stack.top()->verbatim()) &&  buffer[i] == EVALUATE_CHAR) {
                     ++i; // Skip EVALUATE_CHAR
                     const char* end = buffer + i;
                     const std::string result = evaluate(end, &end);

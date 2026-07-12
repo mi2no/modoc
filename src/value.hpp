@@ -14,6 +14,7 @@
 struct value;
 
 static std::unordered_map<std::string_view, value> constants;
+static std::map<std::string_view, value> variables;
 
 struct value {
 
@@ -206,15 +207,16 @@ struct value {
 
             end = (char*)str;
             while (*end > ' ' && *end != ',' && *end != ']') ++end;
-            printf("const: %.*s\n", (int)(end - str), str);
+            printf("const: [%.*s]\n", (int)(end - str), str);
 
-            std::string_view constant = {str, end};
+            std::string_view name = {str, end};
             str = end;
 
-            if (constants.contains(constant))
-                result = constants.at(constant);
-
-            //TODO: check if is a static const
+            if (variables.contains(name)) {
+                result = variables.at(name);
+            }
+            else if (constants.contains(name))
+                result = constants.at(name);
         }
 
         return result;
@@ -310,4 +312,8 @@ static std::string evaluate(const char* str, const char** end) {
 
 static void register_constant(std::string_view name, const value& v) {
     constants[name] = v;
+}
+
+static void register_variable(std::string_view name, const value& v) {
+    variables[name] = v;
 }
