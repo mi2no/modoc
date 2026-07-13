@@ -64,6 +64,7 @@ namespace modoc {
         //std::stack<keyword_instance*> stack;
         std::stack<node*> stack;
         std::vector<modoc::string_type> tokens;
+        std::map<std::string_view, value> meta;
 
         for (size_t i = 0; buffer[i] != '\0'; ++i) {
             size_t tabs = 0;
@@ -96,11 +97,17 @@ namespace modoc {
                     tokens.emplace_back(result, true);
                     i = end - buffer;
                 }
-                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
-                    end = i;
-                    size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
-                    i += x;
-                    printf("Read %zu\n", x);
+                else if (word && buffer[begin] == KEYWORD_CHAR) {
+                    if (buffer[i] == '[') {
+                        end = i;
+                        size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
+                        i += x;
+                        printf("Read %zu\n", x);
+                    }
+                    /*else if (buffer[i] == '{') {
+                        const size_t read = parse_options(buffer + i, meta, '}');
+                        i += read;
+                    }*/
                 }
                 else if (buffer[i] > ' ' && !word) {
                     begin = i;
@@ -138,6 +145,11 @@ namespace modoc {
                                     //stack.push(ik);
                                     node* instance = nodes[view]->instance(tabs + init_depth, options);
                                     options.clear();
+
+                                    if (meta.size()) {
+                                        instance->add_meta(meta);
+                                        meta.clear();
+                                    }
 
                                     if (!instance->is_primitive()) primitives_only = false;
                                     

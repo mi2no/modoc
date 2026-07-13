@@ -17,7 +17,10 @@ enum scope_end : uint8_t {
     START, ENDL, ENDSCP
 };
 
-struct node {    
+struct node {
+    std::map<std::string_view, value> meta;
+    std::unordered_set<std::string_view> tags;
+
     virtual const char* type() const = 0;
     virtual uint8_t scope_end() = 0;
 
@@ -32,6 +35,11 @@ struct node {
     virtual void add_node(node*) = 0;
     virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
 
+    virtual void add_meta(const options_t& meta) {
+        for (const auto& entry : meta)
+            this->meta[entry.first] = entry.second;
+    }
+
     virtual void debug_print() const {
         printf("[%s]\n", type());
     }
@@ -45,6 +53,13 @@ struct node {
     }
     
     virtual ~node() = default;
+};
+
+struct node_factory {
+    virtual node* instance(uint8_t nesting, const options_t&) = 0;
+    virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
+    virtual void set_node_type_id(uint32_t) const = 0;
+    virtual ~node_factory() = default;
 };
 
 struct special_node : node {
@@ -95,13 +110,6 @@ struct text_node : node {
     }
 
     void add_node(node*) override {}
-};
-
-struct node_factory {
-    virtual node* instance(uint8_t nesting, const options_t&) = 0;
-    virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
-    virtual void set_node_type_id(uint32_t) const = 0;
-    virtual ~node_factory() = default;
 };
 
 static bool debug_str_match(const char* a, const char* b) {

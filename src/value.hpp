@@ -274,7 +274,7 @@ struct value {
 
 typedef std::map<std::string_view, value> options_t;
 
-static size_t parse_options(const char* ptr, options_t& ops) {
+static size_t parse_options(const char* ptr, options_t& ops, char term = ']') {
     std::string_view option;
     const char* begin = nullptr;
     bool is_value = false;
@@ -282,7 +282,7 @@ static size_t parse_options(const char* ptr, options_t& ops) {
     const char* const b = ptr;
 
     ++ptr;
-    while (*ptr != ']' && *ptr != '\0') {
+    while (*ptr != term && *ptr != '\0') {
         if (!is_value) {
             if (*ptr > ' ' && begin == nullptr) {
                 begin = ptr;
