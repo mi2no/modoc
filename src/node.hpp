@@ -39,6 +39,9 @@ struct node {
         for (const auto& entry : meta)
             this->meta[entry.first] = entry.second;
     }
+    /*virtual void add_meta(const std::vector<std::pair<std::string_view, value>>& entires) {
+        for (const std::)
+    }*/
 
     virtual void debug_print() const {
         printf("[%s]\n", type());
@@ -121,6 +124,54 @@ static bool debug_str_match(const char* a, const char* b) {
         if (*a++ != *b++) return false;
     return true;
 }
+
+struct group_node : node {
+    static uint32_t t_id;
+    
+    std::vector<node*> nodes;
+
+    virtual uint32_t type_id() const override {
+        return t_id;
+    }
+
+    const char* type() const override {
+        return "group";
+    }
+    
+    uint8_t scope_end() override {
+        return scope_end::ENDSCP;
+    }
+
+
+    const std::vector<node*>* child_nodes() const override {
+        return &nodes;
+    }
+
+    void parse_tokens(std::vector<modoc::string_type>&&, uint8_t) override {}
+
+    void add_node(node* n) override {
+        nodes.push_back(n);
+    }
+
+    ~group_node() override = default;
+};
+
+struct group_f : node_factory {
+    std::vector<uint8_t> id;
+
+    node* instance(uint8_t, const options_t&) override {
+        return new group_node();
+    }
+    
+    node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>& map) override {
+        group_node* g = new group_node();
+        return g;
+    }
+
+    void set_node_type_id(uint32_t id) const override {
+        group_node::t_id = id;
+    }
+};
 
 struct sec_node : node {
     static uint32_t t_id;
@@ -376,6 +427,7 @@ struct code_f : node_factory {
 };
 
 uint32_t text_node::t_id = 0;
+uint32_t group_node::t_id = 0;
 uint32_t sec_node::t_id = 0;
 uint32_t list_node::t_id = 0;
 uint32_t code_node::t_id = 0;

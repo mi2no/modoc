@@ -16,13 +16,28 @@ std::string node_to_str(const node* n) {
         for (const auto& entry : n->meta) {
             style += entry.first;
             style += ": ";
-            style += n->meta.at("color").to_string();
+            style += entry.second.to_string();
             style += ';';
         }
         style += '"';
     }
 
-    if (node::is_type<sec_node>(n)) {
+    if (node::is_type<group_node>(n)) {
+        const group_node* g = (const group_node*)n;
+        
+        result += "<div "; 
+        if (style.size()) result += style;
+        result += '>';
+
+        const std::vector<node*>* children = n->child_nodes();
+
+        if (children != nullptr)
+            for (const node* ch : *children)
+                result += node_to_str(ch);
+
+        result += "</div>";
+    }
+    else if (node::is_type<sec_node>(n)) {
         const sec_node* s = (const sec_node*)n;
         
         result += "<div class=\"sec\" title=\"";
