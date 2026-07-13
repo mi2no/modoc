@@ -290,24 +290,33 @@ namespace modoc {
 
         puts("here");
 
-        auto itr = tree.begin();
-        while (itr != tree.end()) {
-            node* n = *itr;
-            n->debug_print();
+        bool second_pass = false;
+        for (uint8_t pass = 0; pass < 2; ++pass) {
+            auto itr = tree.begin();
+            while (itr != tree.end()) {
+                node* n = *itr;
+                n->debug_print();
 
-            if (!n->is_primitive()) {
-                std::vector<node*> primitives = ((special_node*)n)->expand();
-                itr = tree.erase(itr);
+                if (!n->is_primitive()) {
+                    special_node* sn = (special_node*)n;
 
-                printf("expanded size: %zu\n", primitives.size());
+                    if (pass == 0 && sn->in_second_pass()) second_pass = true;
+                    else {
+                        std::vector<node*> primitives = sn->expand(tree);
+                        itr = tree.erase(itr);
 
-                if (primitives.size()) itr = tree.insert(itr, primitives.begin(), primitives.end());
-                //--itr; // In the next loop the first new "primitive" will be tested
-                continue;
+                        printf("expanded size: %zu\n", primitives.size());
+
+                        if (primitives.size()) itr = tree.insert(itr, primitives.begin(), primitives.end());
+                        //--itr; // In the next loop the first new "primitive" will be tested
+                        continue;
+                    }
+                }
+                else if (n->child_nodes() != nullptr) to_primitive_tree(*(std::vector<node*>*)n->child_nodes());
+
+                ++itr;
             }
-            else if (n->child_nodes() != nullptr) to_primitive_tree(*(std::vector<node*>*)n->child_nodes());
-
-            ++itr;
+            if (!second_pass) break;
         }
     }
 };

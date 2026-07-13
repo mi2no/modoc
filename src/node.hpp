@@ -63,7 +63,7 @@ struct node_factory {
 };
 
 struct special_node : node {
-    virtual std::vector<node*> expand() const = 0;
+    virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
 
     virtual bool in_second_pass() const {
         return false;

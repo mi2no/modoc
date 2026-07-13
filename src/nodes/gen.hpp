@@ -68,7 +68,7 @@ struct gen_node : special_node {
 
 public:
 
-    std::vector<node*> expand() const override {
+    std::vector<node*> expand(const std::vector<node*>&) const override {
         char path[] = "tmp_modoc_outXXXXXX";
         int fd = mkstemp(path);
 

@@ -19,6 +19,7 @@
 // Nodes
 #include "nodes/gen.hpp"
 #include "nodes/repeat.hpp"
+#include "nodes/meta.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -173,6 +174,7 @@ int main(int argc, char** argv) {
     register_node_factory("code", new code_f());
     register_node_factory("gen", new gen_f());
     register_node_factory("repeat", new repeat_f());
+    register_node_factory("meta", new meta_f());
 
     register_constant("code.lang.cpp", {"cpp"});
     register_constant("gen.mode.modoc", {gen_node::MODOC});

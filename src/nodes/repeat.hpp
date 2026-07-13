@@ -51,7 +51,7 @@ struct repeat_node : special_node {
         return true;
     }
 
-    std::vector<node*> expand() const override {
+    std::vector<node*> expand(const std::vector<node*>&) const override {
         std::vector<node*> result;
 
         for (double i = from; i < to; ++i) {
