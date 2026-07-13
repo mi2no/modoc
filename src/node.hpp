@@ -65,6 +65,10 @@ struct node_factory {
 struct special_node : node {
     virtual std::vector<node*> expand() const = 0;
 
+    virtual bool in_second_pass() const {
+        return false;
+    }
+
     bool is_primitive() const override final {
         return false;
     }

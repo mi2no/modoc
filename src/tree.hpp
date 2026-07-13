@@ -89,7 +89,7 @@ namespace modoc {
             
             // Line
             while (buffer[i] != '\0') {
-                if ((stack.empty() || !stack.top()->verbatim()) &&  buffer[i] == EVALUATE_CHAR) {
+                if ((stack.empty() || !stack.top()->verbatim()) && buffer[i] == EVALUATE_CHAR) {
                     ++i; // Skip EVALUATE_CHAR
                     const char* end = buffer + i;
                     const std::string result = evaluate(end, &end);
@@ -97,17 +97,18 @@ namespace modoc {
                     tokens.emplace_back(result, true);
                     i = end - buffer;
                 }
-                else if (word && buffer[begin] == KEYWORD_CHAR) {
+                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] > ' ') {
                     if (buffer[i] == '[') {
                         end = i;
                         size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
                         i += x;
                         printf("Read %zu\n", x);
                     }
-                    /*else if (buffer[i] == '{') {
+                    else if (buffer[i] == '{') {
                         const size_t read = parse_options(buffer + i, meta, '}');
+                        printf("Read %zu (meta)\n", read);
                         i += read;
-                    }*/
+                    }
                 }
                 else if (buffer[i] > ' ' && !word) {
                     begin = i;

@@ -18,7 +18,18 @@ std::string node_to_str(const node* n) {
         result += s->title;
         result += "\" num=\"";
         result += std::to_string(s->id[s->id_size - 1]);
-        result += "\">";
+        result += '"';
+
+        if (n->meta.size()) {
+            result += " style=\"";
+            if (n->meta.contains("color")) {
+                result += "color:";
+                result += n->meta.at("color").string();
+            }
+            result += '"';
+        }
+
+        result += '>';
 
         const std::vector<node*>* children = n->child_nodes();
 

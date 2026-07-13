@@ -182,7 +182,7 @@ struct value {
         else {
             char* end = (char*)str + 4;
             
-            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0')) {
+            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
                 result.type = BOOLEAN;
                 result.data.boolean = true;
                 str = end;
@@ -190,7 +190,7 @@ struct value {
             }
 
             ++end;
-            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0')) {
+            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
                 result.type = BOOLEAN;
                 result.data.boolean = false;
                 str = end;
@@ -198,7 +198,7 @@ struct value {
             }
             
             const double num = strtod(str, &end);
-            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0')) {
+            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
                 result.type = NUMBER;
                 result.data.number = num;
                 str = end;
@@ -206,7 +206,7 @@ struct value {
             }
 
             end = (char*)str;
-            while (*end > ' ' && *end != ',' && *end != ']') ++end;
+            while (*end > ' ' && *end != ',' && *end != ']' && *end != '}') ++end;
             printf("const: [%.*s]\n", (int)(end - str), str);
 
             std::string_view name = {str, end};
@@ -274,7 +274,7 @@ struct value {
 
 typedef std::map<std::string_view, value> options_t;
 
-static size_t parse_options(const char* ptr, options_t& ops, char term = ']') {
+static size_t parse_options(const char* ptr, options_t& ops, const char term = ']') {
     std::string_view option;
     const char* begin = nullptr;
     bool is_value = false;
@@ -296,7 +296,7 @@ static size_t parse_options(const char* ptr, options_t& ops, char term = ']') {
         else if (*ptr > ' ' && *ptr != '=') {
             ops[option] = value::_parse(ptr);
             is_value = false;
-            if (*ptr == ']' || *ptr == '\0') break;
+            if (*ptr == term || *ptr == '\0') break;
         }
         ++ptr;
     }
