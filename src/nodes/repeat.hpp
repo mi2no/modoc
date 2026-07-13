@@ -63,6 +63,8 @@ struct repeat_node : special_node {
         }
         variables.erase("i");
 
+        modoc::apply_meta(result, meta);
+
         return result;
     }
 

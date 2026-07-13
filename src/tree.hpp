@@ -54,6 +54,17 @@ namespace modoc {
         return tokens;
     }
 
+    static void apply_meta(const std::vector<node*>& tree, const options_t& meta) {
+        for (node* n : tree) {
+            for (const auto& entry : meta)
+                if (!n->meta.contains(entry.first))
+                    n->meta[entry.first] = entry.second;
+
+            const std::vector<node*>* children = n->child_nodes();
+            if (children != nullptr) apply_meta(*children, meta);
+        }
+    }
+
     static bool primitives_only = true;
 
     static std::vector<node*> create_tree(const char* const& buffer, const uint8_t init_depth = 0) {

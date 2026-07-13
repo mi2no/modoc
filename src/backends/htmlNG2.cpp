@@ -9,7 +9,18 @@
 std::unordered_set<std::string> dependencies;
 
 std::string node_to_str(const node* n) {
-    std::string result;
+    std::string result, style;
+
+    if (n->meta.size()) {
+        style = "style=\"";
+        for (const auto& entry : n->meta) {
+            style += entry.first;
+            style += ": ";
+            style += n->meta.at("color").to_string();
+            style += ';';
+        }
+        style += '"';
+    }
 
     if (node::is_type<sec_node>(n)) {
         const sec_node* s = (const sec_node*)n;
@@ -19,16 +30,7 @@ std::string node_to_str(const node* n) {
         result += "\" num=\"";
         result += std::to_string(s->id[s->id_size - 1]);
         result += '"';
-
-        if (n->meta.size()) {
-            result += " style=\"";
-            if (n->meta.contains("color")) {
-                result += "color:";
-                result += n->meta.at("color").string();
-            }
-            result += '"';
-        }
-
+        if (style.size()) result += style;
         result += '>';
 
         const std::vector<node*>* children = n->child_nodes();
@@ -42,7 +44,9 @@ std::string node_to_str(const node* n) {
     else if (node::is_type<list_node>(n)) {
         list_node* l = (list_node*)n;
         //result += "<ul>\n";
-        result += "<div class=\"list\">\n";
+        result += "<div class=\"list\"";
+        if (style.size()) result += style;
+        result += ">\n";
  
         const std::vector<node*>* children = n->child_nodes();
 
@@ -64,7 +68,9 @@ std::string node_to_str(const node* n) {
 
         result += "<div class=\"code\" lang=\"";
         result += c->lang;
-        result += "\">\n";
+        result += '"';
+        if (style.size()) result += style;
+        result += ">\n";
 
         for (code_node::token_t t : c->tokens) {
             if (t.type == code_node::NEWL) {
@@ -97,10 +103,19 @@ std::string node_to_str(const node* n) {
     else if (node::is_type<text_node>(n)) {
         text_node* t = (text_node*)n;
 
+        if (style.size()) {
+            result += "<span ";
+            result += style;
+            result += ">\n";
+        }
+
         for (const modoc::string_type& s : t->tokens) {
             result += s.view();
             result += ' ';
         }
+
+        if (style.size()) result += "\n</span>";
+
         result += '\n';
     }
 

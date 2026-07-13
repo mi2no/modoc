@@ -304,6 +304,31 @@ static size_t parse_options(const char* ptr, options_t& ops, const char term = '
     return ptr - b;
 }
 
+static void parse_options(std::string_view view, options_t& ops) {
+    std::string_view option;
+    const char* begin = nullptr;
+    bool is_value = false;
+
+    for (const char* ptr = view.data(); ptr < view.end(); ++ptr) {
+        if (!is_value) {
+            if (*ptr > ' ' && begin == nullptr) {
+                begin = ptr;
+            }
+            else if (begin != nullptr && (*ptr <= ' ' || *ptr == '=')) {
+                option = {begin, ptr};
+                begin = nullptr;
+                is_value = true;
+            }
+        }
+        else if (*ptr > ' ' && *ptr != '=') {
+            ops[option] = value::_parse(ptr);
+            is_value = false;
+        }
+        ++ptr;
+    }
+}
+
+
 static std::string evaluate(const char* str, const char** end) {
     const value v = value::_parse(str);
     if (end != nullptr) *end = str;
