@@ -43,7 +43,7 @@ std::string node_to_str(const node* n) {
         result += "<div class=\"sec\" title=\"";
         result += s->title;
         result += "\" num=\"";
-        result += std::to_string(s->id[s->id_size - 1]);
+        result += std::to_string(s->id[s->depth]);
         result += '"';
         if (style.size()) result += style;
         result += '>';

@@ -21,6 +21,7 @@
 #include "nodes/repeat.hpp"
 #include "nodes/meta.hpp"
 #include "nodes/code.hpp"
+#include "nodes/assign.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -177,6 +178,7 @@ int main(int argc, char** argv) {
     register_node_factory("gen", new gen_f());
     register_node_factory("repeat", new repeat_f());
     register_node_factory("meta", new meta_f());
+    register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());
 
     register_constant("code.lang.cpp", {"cpp"});
@@ -210,6 +212,9 @@ int main(int argc, char** argv) {
         modoc::to_primitive_tree(tree);
         modoc::print_doc_tree(tree);
     }
+
+    modoc::tree_final_pass(tree);
+    modoc::print_doc_tree(tree);
 
     to_doc(tree, backends[backend_id].c_str());
 

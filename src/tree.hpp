@@ -314,6 +314,7 @@ namespace modoc {
                     if (pass == 0 && sn->in_second_pass()) second_pass = true;
                     else {
                         std::vector<node*> primitives = sn->expand(tree);
+                        // TODO: delete
                         itr = tree.erase(itr);
 
                         printf("expanded size: %zu\n", primitives.size());
@@ -328,6 +329,13 @@ namespace modoc {
                 ++itr;
             }
             if (!second_pass) break;
+        }
+    }
+
+    static void tree_final_pass(const std::vector<node*>& core_tree) {
+        for (node* n : core_tree) {
+            n->final_pass();
+            if (n->child_nodes() != nullptr) tree_final_pass(*n->child_nodes());
         }
     }
 };
