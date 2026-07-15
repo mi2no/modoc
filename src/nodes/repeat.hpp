@@ -51,7 +51,7 @@ struct repeat_node : special_node {
         return true;
     }
 
-    std::vector<node*> expand() const override {
+    std::vector<node*> expand(const std::vector<node*>&) const override {
         std::vector<node*> result;
 
         for (double i = from; i < to; ++i) {
@@ -62,6 +62,8 @@ struct repeat_node : special_node {
             std::move(itr_tree.begin(), itr_tree.end(), std::back_inserter(result));
         }
         variables.erase("i");
+
+        modoc::apply_meta(result, meta);
 
         return result;
     }

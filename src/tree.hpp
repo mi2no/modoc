@@ -54,6 +54,17 @@ namespace modoc {
         return tokens;
     }
 
+    static void apply_meta(const std::vector<node*>& tree, const options_t& meta) {
+        for (node* n : tree) {
+            for (const auto& entry : meta)
+                if (!n->meta.contains(entry.first))
+                    n->meta[entry.first] = entry.second;
+
+            const std::vector<node*>* children = n->child_nodes();
+            if (children != nullptr) apply_meta(*children, meta);
+        }
+    }
+
     static bool primitives_only = true;
 
     static std::vector<node*> create_tree(const char* const& buffer, const uint8_t init_depth = 0) {
@@ -64,6 +75,7 @@ namespace modoc {
         //std::stack<keyword_instance*> stack;
         std::stack<node*> stack;
         std::vector<modoc::string_type> tokens;
+        std::map<std::string_view, value> meta;
 
         for (size_t i = 0; buffer[i] != '\0'; ++i) {
             size_t tabs = 0;
@@ -88,7 +100,7 @@ namespace modoc {
             
             // Line
             while (buffer[i] != '\0') {
-                if ((stack.empty() || !stack.top()->verbatim()) &&  buffer[i] == EVALUATE_CHAR) {
+                if ((stack.empty() || !stack.top()->verbatim()) && buffer[i] == EVALUATE_CHAR) {
                     ++i; // Skip EVALUATE_CHAR
                     const char* end = buffer + i;
                     const std::string result = evaluate(end, &end);
@@ -96,11 +108,18 @@ namespace modoc {
                     tokens.emplace_back(result, true);
                     i = end - buffer;
                 }
-                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] == '[') {
-                    end = i;
-                    size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
-                    i += x;
-                    printf("Read %zu\n", x);
+                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] > ' ') {
+                    if (buffer[i] == '[') {
+                        end = i;
+                        size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
+                        i += x;
+                        printf("Read %zu\n", x);
+                    }
+                    else if (buffer[i] == '{') {
+                        const size_t read = parse_options(buffer + i, meta, '}');
+                        printf("Read %zu (meta)\n", read);
+                        i += read;
+                    }
                 }
                 else if (buffer[i] > ' ' && !word) {
                     begin = i;
@@ -138,6 +157,11 @@ namespace modoc {
                                     //stack.push(ik);
                                     node* instance = nodes[view]->instance(tabs + init_depth, options);
                                     options.clear();
+
+                                    if (meta.size()) {
+                                        instance->add_meta(meta);
+                                        meta.clear();
+                                    }
 
                                     if (!instance->is_primitive()) primitives_only = false;
                                     
@@ -277,24 +301,41 @@ namespace modoc {
 
         puts("here");
 
-        auto itr = tree.begin();
-        while (itr != tree.end()) {
-            node* n = *itr;
-            n->debug_print();
+        bool second_pass = false;
+        for (uint8_t pass = 0; pass < 2; ++pass) {
+            auto itr = tree.begin();
+            while (itr != tree.end()) {
+                node* n = *itr;
+                n->debug_print();
 
-            if (!n->is_primitive()) {
-                std::vector<node*> primitives = ((special_node*)n)->expand();
-                itr = tree.erase(itr);
+                if (!n->is_primitive()) {
+                    special_node* sn = (special_node*)n;
 
-                printf("expanded size: %zu\n", primitives.size());
+                    if (pass == 0 && sn->in_second_pass()) second_pass = true;
+                    else {
+                        std::vector<node*> primitives = sn->expand(tree);
+                        // TODO: delete
+                        itr = tree.erase(itr);
 
-                if (primitives.size()) itr = tree.insert(itr, primitives.begin(), primitives.end());
-                //--itr; // In the next loop the first new "primitive" will be tested
-                continue;
+                        printf("expanded size: %zu\n", primitives.size());
+
+                        if (primitives.size()) itr = tree.insert(itr, primitives.begin(), primitives.end());
+                        //--itr; // In the next loop the first new "primitive" will be tested
+                        continue;
+                    }
+                }
+                else if (n->child_nodes() != nullptr) to_primitive_tree(*(std::vector<node*>*)n->child_nodes());
+
+                ++itr;
             }
-            else if (n->child_nodes() != nullptr) to_primitive_tree(*(std::vector<node*>*)n->child_nodes());
+            if (!second_pass) break;
+        }
+    }
 
-            ++itr;
+    static void tree_final_pass(const std::vector<node*>& core_tree) {
+        for (node* n : core_tree) {
+            n->final_pass();
+            if (n->child_nodes() != nullptr) tree_final_pass(*n->child_nodes());
         }
     }
 };
