@@ -202,12 +202,15 @@ int main(int argc, char** argv) {
     result = "\\documentclass{article}\n\\usepackage[left=2.5cm,top=2.5cm,right=2.5cm,bottom=2.5cm]{geometry}\n" + header + result;
     puts(result.c_str());*/
 
-    std::vector<node*> tree = modoc::create_tree(buffer);
+    /*std::vector<node*> tree = modoc::create_tree(buffer);
 
     puts("Document tree structure:\n");
-    modoc::print_doc_tree(tree);
+    modoc::print_doc_tree(tree);*/
 
-    if (!modoc::primitives_only) {
+    modoc::uninitialized_tree un_tree = modoc::uninitialized_tree::parse_document(buffer);
+    un_tree.print();
+
+    /*if (!modoc::primitives_only) {
         puts("To primitives:\n");
         modoc::to_primitive_tree(tree);
         modoc::print_doc_tree(tree);
@@ -218,9 +221,9 @@ int main(int argc, char** argv) {
 
     to_doc(tree, backends[backend_id].c_str());
 
-    printf("\nCompiled via %s backend. (%s)\n", argv[2] + 2, backends[backend_id].c_str());
+    printf("\nCompiled via %s backend. (%s)\n", argv[2] + 2, backends[backend_id].c_str());*/
 
-    destroy_tree(tree);
+    //destroy_tree(tree);
     free(buffer);
 
     for (const auto ent : nodes) {

@@ -1,0 +1,22 @@
+●
+├──[0][text]
+├──[2]? Sekcja pierwsza
+│  ├──[0][text]
+│  ├──[2]?.? Podsekcja
+│  │  ├──[8][assign] x=10,y=20
+│  │  ├──[0][text]
+│  │  ├──[3][list]
+│  │  │  ├─□[0][text]
+│  │  │  ├─□[0][text]
+│  │  │  └─□[4][code](lang = cpp)
+│  │  ├──[9][new_code](lang = cpp)
+│  │  └──[0][text]
+│  └──[0][text]
+├──[2]? Sekcja 2
+│  └──[0][text]
+├──[0][text]
+├──[5][gen](cmd = cat ../inner.mdoc >> "$MODOC_OUTPUT_FILE")
+├──[7][meta]
+└──[2]? Gen test
+   ├──[5][gen](cmd = cat ../inner.mdoc >> "$MODOC_OUTPUT_FILE")
+   └──[6][repeat] Hello world! $i 
