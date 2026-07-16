@@ -207,7 +207,7 @@ struct value {
 
             end = (char*)str;
             while (*end > ' ' && *end != ',' && *end != ']' && *end != '}') ++end;
-            printf("const: [%.*s]\n", (int)(end - str), str);
+            //printf("const: [%.*s]\n", (int)(end - str), str);
 
             std::string_view name = {str, end};
             str = end;
@@ -324,7 +324,6 @@ static void parse_options(std::string_view view, options_t& ops) {
             ops[option] = value::_parse(ptr);
             is_value = false;
         }
-        ++ptr;
     }
 }
 

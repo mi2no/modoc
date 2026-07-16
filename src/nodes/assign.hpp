@@ -43,13 +43,14 @@ struct assign_node : special_node {
         return true;
     }
 
-    std::vector<node*> expand(const std::vector<node*>&) const override {
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
         options_t assigned; 
         parse_options(content, assigned);
 
-        for (const auto& entry : assigned) {
+        /*for (const auto& entry : assigned) {
             variables[entry.first] = entry.second;
-        }
+        }*/ // TODO: use function of subtree to add variables
+
         return {};
     }
 

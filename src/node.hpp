@@ -10,6 +10,7 @@
 
 //#include "options.hpp"
 #include "string_type.hpp"
+#include "tree.hpp"
 #include "value.hpp"
 
 #include "../../serialize/serialize.hpp"
@@ -69,7 +70,8 @@ struct node_factory {
 };
 
 struct special_node : node {
-    virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
+    //virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
+    virtual std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const = 0;
 
     virtual bool in_second_pass() const {
         return false;
@@ -81,7 +83,7 @@ struct special_node : node {
 };
 
 struct text_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     std::vector<modoc::string_type> tokens{};
 
@@ -129,7 +131,7 @@ static bool debug_str_match(const char* a, const char* b) {
 }
 
 struct group_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
     
     std::vector<node*> nodes;
 
@@ -177,7 +179,7 @@ struct group_f : node_factory {
 };
 
 struct sec_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
     inline static std::vector<uint8_t> sec_id;
 
     std::vector<node*> nodes;
@@ -324,7 +326,7 @@ struct serializer<sec_node> {
 };
 
 struct list_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     std::vector<node*> nodes;
 
@@ -377,7 +379,7 @@ struct list_f : node_factory {
 };
 
 struct code_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     enum token_type : uint8_t {
         NEWL, NONE, KEYWORD, TYPE
@@ -456,10 +458,4 @@ struct code_f : node_factory {
     }
 };
 
-uint32_t text_node::t_id = 0;
-uint32_t group_node::t_id = 0;
-uint32_t sec_node::t_id = 0;
-uint32_t list_node::t_id = 0;
-uint32_t code_node::t_id = 0;
-
-static std::unordered_map<std::string_view, node_factory*> nodes;
+inline std::unordered_map<std::string_view, node_factory*> node_factories;

@@ -5,7 +5,7 @@
 #include "../node.hpp"
 
 struct new_code_node : special_node {
-    static uint32_t t_id;
+    inline static uint32_t t_id = 0;
 
     enum token_type : uint8_t {
         NEWL, NONE, KEYWORD, TYPE
@@ -73,8 +73,9 @@ struct new_code_node : special_node {
     void add_node(node*) override {}
 
 
-    std::vector<node*> expand(const std::vector<node*>&) const override {
-        std::vector<node*> result {new group_node()};
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
+    //std::vector<node*> expand(const std::vector<node*>&) const override {
+        /*std::vector<node*> result {new group_node()};
         group_node *top = (group_node*)result.front(), *last = nullptr;
 
         top->meta["border-radius"] = {"10px"};
@@ -110,7 +111,8 @@ struct new_code_node : special_node {
             }
         }
 
-        return result;
+        return result;*/
+        return {};
     }
 
 
@@ -126,5 +128,3 @@ struct new_code_f : node_factory {
         new_code_node::t_id = id;
     }
 };
-
-uint32_t new_code_node::t_id;

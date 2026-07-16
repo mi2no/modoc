@@ -73,24 +73,7 @@ void register_node_factory(const char* sym, node_factory* nf) {
     static uint32_t type_id_itr = 1; // 0 - text_node
     
     nf->set_node_type_id(type_id_itr++);
-    nodes[sym] = nf;
-}
-
-
-void destroy_node(node* n) {
-    const std::vector<node*>* children = n->child_nodes();
-
-    if (children != nullptr)
-        for (node* ch : *children)
-            destroy_node(ch);
-
-    delete n;
-}
-
-void destroy_tree(std::vector<node*>& tree) {
-    for (node* n : tree)
-        destroy_node(n);
-    tree.clear();
+    node_factories[sym] = nf;
 }
 
 #include <filesystem>
@@ -185,6 +168,8 @@ int main(int argc, char** argv) {
     register_constant("gen.mode.modoc", {gen_node::MODOC});
     register_constant("gen.mode.json", {gen_node::JSON});
 
+    printf("Node factories: %zu\n", node_factories.size());
+
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);
     size_t size = ftell(file);
@@ -210,6 +195,9 @@ int main(int argc, char** argv) {
     modoc::uninitialized_tree un_tree = modoc::uninitialized_tree::parse_document(buffer);
     un_tree.print();
 
+    modoc::tree tree = modoc::tree::initialize(std::move(un_tree));
+    tree.print();
+
     /*if (!modoc::primitives_only) {
         puts("To primitives:\n");
         modoc::to_primitive_tree(tree);
@@ -226,7 +214,7 @@ int main(int argc, char** argv) {
     //destroy_tree(tree);
     free(buffer);
 
-    for (const auto ent : nodes) {
+    for (const auto ent : node_factories) {
         delete ent.second;
     }
 

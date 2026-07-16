@@ -5,7 +5,7 @@
 #include <algorithm>
 
 struct meta_node : special_node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     std::string content;
 
@@ -42,7 +42,8 @@ struct meta_node : special_node {
     }
 
 
-    std::vector<node*> expand(const std::vector<node*>& subtree) const override {
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
+    //std::vector<node*> expand(const std::vector<node*>& subtree) const override {
         bool def = false;
         const char* begin = 0;
 
@@ -68,12 +69,12 @@ struct meta_node : special_node {
         }*/
 
 
-        auto itr = std::find(subtree.begin(), subtree.end(), this);
+        /*auto itr = std::find(subtree.begin(), subtree.end(), this);
         while (itr != subtree.end()) {
             node* n = *itr;
             if (!n->meta.contains("color")) n->meta["color"] = value("yellow"); 
             ++itr;
-        }
+        }*/
         return {};
     }
 
@@ -91,5 +92,3 @@ struct meta_f : node_factory {
 
     ~meta_f() override = default;
 };
-
-uint32_t meta_node::t_id = 0;

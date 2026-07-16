@@ -5,7 +5,7 @@
 #include "../value.hpp"
 
 struct repeat_node : special_node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     uint8_t depth;
     double from, to;
@@ -51,8 +51,10 @@ struct repeat_node : special_node {
         return true;
     }
 
-    std::vector<node*> expand(const std::vector<node*>&) const override {
-        std::vector<node*> result;
+
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
+    //std::vector<node*> expand(const std::vector<node*>&) const override {
+        /*std::vector<node*> result;
 
         for (double i = from; i < to; ++i) {
             variables["i"] = value(i);
@@ -63,9 +65,9 @@ struct repeat_node : special_node {
         }
         variables.erase("i");
 
-        modoc::apply_meta(result, meta);
+        modoc::apply_meta(result, meta);*/
 
-        return result;
+        return {};
     }
 
     ~repeat_node() override = default;
@@ -85,5 +87,3 @@ struct repeat_f : node_factory {
         repeat_node::t_id = id;
     }
 };
-
-uint32_t repeat_node::t_id = 0;
