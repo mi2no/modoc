@@ -117,6 +117,11 @@ struct text_node : node {
     }
 
 
+    void debug_print() const override {
+        printf("[text](%.*s)\n", (int)tokens[0].view().size(), tokens[0].view().data());
+    }
+
+
     const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
@@ -180,7 +185,7 @@ struct group_f : node_factory {
 
 struct sec_node : node {
     inline static uint32_t t_id;
-    inline static std::vector<uint8_t> sec_id;
+    //inline static std::vector<uint8_t> sec_id;
 
     std::vector<node*> nodes;
     std::string title;
@@ -188,7 +193,16 @@ struct sec_node : node {
     uint8_t* id = nullptr;
     uint8_t depth = 0;
 
-    /*sec_node(std::vector<uint8_t> id_v) {
+    sec_node(std::vector<uint8_t> id_v) {
+        depth = /*id_size =*/ id_v.size() - 1;
+        id = new uint8_t[depth + 1];//id_size];
+
+        for (uint8_t i = 0; i < id_v.size(); ++i)
+            id[i] = id_v[i];
+    }
+
+    /*sec_node() = default; // TODO: temp
+    void set_id(std::vector<uint8_t> id_v) { // TODO: temp
         id_size = id_v.size();
         id = new uint8_t[id_size];
 
@@ -196,16 +210,7 @@ struct sec_node : node {
             id[i] = id_v[i];
     }
 
-    sec_node() = default; // TODO: temp
-    void set_id(std::vector<uint8_t> id_v) { // TODO: temp
-        id_size = id_v.size();
-        id = new uint8_t[id_size];
-
-        for (uint8_t i = 0; i < id_size; ++i)
-            id[i] = id_v[i];
-    }*/
-
-    sec_node(uint8_t depth) : depth(depth) {}
+    sec_node(uint8_t depth) : depth(depth) {}*/
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -260,7 +265,7 @@ struct sec_node : node {
     }
 
     void final_pass() override {
-        const uint8_t nums = depth + 1;
+        /*const uint8_t nums = depth + 1;
 
         if (sec_id.size() < nums) sec_id.push_back(0);
         else {
@@ -270,7 +275,7 @@ struct sec_node : node {
         ++sec_id.back();
 
         id = new uint8_t[sec_id.size()];
-        memcpy(id, sec_id.data(), sec_id.size());
+        memcpy(id, sec_id.data(), sec_id.size());*/
     }
 
     ~sec_node() override {
@@ -295,14 +300,15 @@ struct sec_f : node_factory {
     }
 
     node* instance(uint8_t nesting, const options_t&) override {
-        //handle_depth(nesting);
-        return new sec_node(nesting);
+        handle_depth(nesting);
+        //return new sec_node(nesting);
+        return new sec_node(id);
     }
     
     node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>& map) override {
-        //handle_depth(depth);
+        handle_depth(depth);
 
-        sec_node* s = new sec_node(depth);
+        sec_node* s = new sec_node(id);
 
         if (map.contains("title")) {
             const char* ptr = map.at("title");

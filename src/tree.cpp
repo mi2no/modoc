@@ -40,7 +40,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, const uninitialized_
         }
 
         if (n->is_primitive()) {
-            modoc::tree initialized = initialize(nt.children);
+            modoc::tree initialized = initialize(nt.children, depth + 1);
             
             for (node* child : initialized.nodes) n->add_node(child);
             initialized.nodes.clear();
@@ -53,7 +53,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, const uninitialized_
 
             paste_children(expanded, nt.children);
             
-            modoc::tree initialized = modoc::tree::initialize(expanded, depth + 1);
+            modoc::tree initialized = modoc::tree::initialize(expanded, depth);
             std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 

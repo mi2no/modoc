@@ -54,20 +54,17 @@ struct repeat_node : special_node {
 
     std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
     //std::vector<node*> expand(const std::vector<node*>&) const override {
-        /*std::vector<node*> result;
+        std::vector<modoc::uninitialized_tree::unode> result;
+        result.reserve((size_t)(to - from) * 2);
 
         for (double i = from; i < to; ++i) {
-            variables["i"] = value(i);
-            std::vector<node*> itr_tree = modoc::create_tree(modoc.c_str(), depth);
-
-            result.reserve(result.size() + itr_tree.size());
-            std::move(itr_tree.begin(), itr_tree.end(), std::back_inserter(result));
+            result.push_back({"assign", "", "overwrite = true", "i = 1"});
+            result.push_back({true});
         }
-        variables.erase("i");
 
-        modoc::apply_meta(result, meta);*/
+        //modoc::apply_meta(result, meta);
 
-        return {};
+        return result;
     }
 
     ~repeat_node() override = default;
