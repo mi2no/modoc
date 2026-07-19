@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 #include <variant>
 #include <stack>
@@ -39,7 +40,8 @@ namespace modoc {
             using value_type = std::variant<
                 node_type,
                 std::string_view,
-                bool
+                bool,
+                std::unordered_map<std::string_view, const char*>
             >;
 
             value_type _value;
@@ -47,6 +49,7 @@ namespace modoc {
             unode(bool) : _value(true) {}
             unode(std::string_view view) : _value(view) {}
             unode(std::string_view name, std::string_view tags, std::string_view options, std::string_view meta) : _value(node_type{name, tags, options, meta, {}}) {}
+            unode(std::unordered_map<std::string_view, const char*> serialized) : _value(serialized) {}
 
             bool is_node() const {
                 return _value.index() == 0;
@@ -172,6 +175,14 @@ namespace modoc {
             }
 
             if (text_begin != nullptr) result.nodes.emplace_back(std::string_view{text_begin, buffer + i});
+
+
+            return result;
+        }
+
+        static uninitialized_tree parse_serialized(std::string_view json) {
+            uninitialized_tree result;
+
 
 
             return result;

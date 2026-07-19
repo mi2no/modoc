@@ -22,6 +22,7 @@
 #include "nodes/meta.hpp"
 #include "nodes/code.hpp"
 #include "nodes/assign.hpp"
+#include "nodes/if.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -160,6 +161,7 @@ int main(int argc, char** argv) {
     register_node_factory("code", new code_f());
     register_node_factory("gen", new gen_f());
     register_node_factory("repeat", new repeat_f());
+    register_node_factory("if", new if_f());
     register_node_factory("meta", new meta_f());
     register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());

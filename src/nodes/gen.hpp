@@ -95,7 +95,7 @@ public:
                 puts(out);
 
                 return modoc::uninitialized_tree::parse_document(out).nodes;
-            /*case JSON:
+            case JSON:
             {
                 puts("[@gen] json:");
                 json::pretty_print(out);
@@ -160,7 +160,7 @@ public:
                     }
                     else stack.push({top->infos[top->ind].children, 0, curr});
                 }
-            }*/
+            }
         }
 
         delete[] out;
