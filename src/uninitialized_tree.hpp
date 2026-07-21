@@ -35,8 +35,8 @@ namespace modoc {
         
         struct unode {
             struct node_type {
-                std::string_view node_name;
-                std::string_view tags, options, meta;
+                modoc::string_type node_name;
+                modoc::string_type tags, options, meta;
                 std::vector<unode> children;
             };
 
@@ -48,7 +48,8 @@ namespace modoc {
 
             using value_type = std::variant<
                 node_type,
-                std::string_view, // text
+                modoc::string_type,
+                //std::string_view, // text
                 bool//, // <insert>
                 //node_serialized
             >;
@@ -56,8 +57,8 @@ namespace modoc {
             value_type _value;
 
             unode(bool) : _value(true) {}
-            unode(std::string_view view) : _value(view) {}
-            unode(std::string_view name, std::string_view tags, std::string_view options, std::string_view meta) : _value(node_type{name, tags, options, meta, {}}) {}
+            unode(modoc::string_type&& view) : _value(std::move(view)) {}
+            unode(modoc::string_type&& name, modoc::string_type&& tags, modoc::string_type&& options, modoc::string_type&& meta) : _value(node_type{std::move(name), std::move(tags), std::move(options), std::move(meta), {}}) {}
             /*unode(const std::unordered_map<std::string_view, const char*>& serialized) {
                 const modoc::string_type name = serialized.contains("name") ? {serialized.at("name"), true} : {"group", false};
                 _value = node_serialized{serialized.at("name")};
@@ -83,21 +84,25 @@ namespace modoc {
                 return std::get<node_type>(_value);
             }
 
-            std::string_view& text() {
-                return std::get<std::string_view>(_value);
+            modoc::string_type& text() {
+                return std::get<modoc::string_type>(_value);
             }
 
-            const std::string_view& text() const {
-                return std::get<std::string_view>(_value);
+            const modoc::string_type& text() const {
+                return std::get<modoc::string_type>(_value);
             }
+
+            /*const std::string_view& text() const {
+                return std::get<std::string_view>(_value);
+            }*/
 
             void print() const {
                 if (is_node()) {
                     const node_type& n = std::get<node_type>(_value);
-                    printf("[?%.*s]", (int)n.node_name.size(), n.node_name.data());
-                    if (n.tags.size()) printf("(%.*s)", (int)n.tags.size(), n.tags.data());
-                    if (n.options.size()) printf("[%.*s]", (int)n.options.size(), n.options.data());
-                    if (n.meta.size()) printf("{%.*s}", (int)n.meta.size(), n.meta.data());
+                    printf("[?%.*s]", (int)n.node_name.view().size(), n.node_name.view().data());
+                    if (n.tags.view().size()) printf("(%.*s)", (int)n.tags.view().size(), n.tags.view().data());
+                    if (n.options.view().size()) printf("[%.*s]", (int)n.options.view().size(), n.options.view().data());
+                    if (n.meta.view().size()) printf("{%.*s}", (int)n.meta.view().size(), n.meta.view().data());
                     putchar('\n');
                 }
                 else puts("[text]");
@@ -114,7 +119,7 @@ namespace modoc {
         /*std::map<modoc::string_type, std::stack<layered_var>> variables;
         uint32_t ind = 0;*/
 
-        static uninitialized_tree parse_document(const char* buffer) {
+        static uninitialized_tree parse_document(const char* buffer, bool copy = false) {
             uninitialized_tree result;
 
             size_t begin = 0, end = 0;
@@ -132,7 +137,7 @@ namespace modoc {
                 }
                 while (tabs < stack.size()) {
                     if (text_begin != nullptr) {
-                        stack.top()->node().children.emplace_back(std::string_view{text_begin, buffer + i - tabs});
+                        stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
                         text_begin = nullptr;
                     }
 
@@ -147,8 +152,8 @@ namespace modoc {
                 while (buffer[i] != '\n' && buffer[i] != '\0') {
                     if (buffer[i] == KEYWORD_CHAR) {
                         if (text_begin != nullptr) {
-                            if (stack.size()) stack.top()->node().children.emplace_back(std::string_view{text_begin, buffer + i - tabs});
-                            else result.nodes.emplace_back(std::string_view{text_begin, buffer + i - tabs});
+                            if (stack.size()) stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
+                            else result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
                             text_begin = nullptr;
                         }
 
@@ -175,7 +180,7 @@ namespace modoc {
                             }
                         }
 
-                        unode n = {name, tags, options, meta};
+                        unode n = {modoc::string_type(name, copy), modoc::string_type(tags, copy), modoc::string_type(options, copy), modoc::string_type(meta, copy)};
 
                         if (stack.size()) {
                             stack.top()->node().children.push_back(std::move(n));
@@ -196,13 +201,13 @@ namespace modoc {
 
             while (stack.size()) {
                 if (text_begin != nullptr) {
-                    stack.top()->node().children.emplace_back(std::string_view{text_begin, buffer + i});
+                    stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy));
                     text_begin = nullptr;
                 }
                 stack.pop();
             }
 
-            if (text_begin != nullptr) result.nodes.emplace_back(std::string_view{text_begin, buffer + i});
+            if (text_begin != nullptr) result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy));
 
 
             return result;
@@ -240,7 +245,7 @@ namespace modoc {
                 branch_end.push_back(false);
                 for (size_t i = 0; i < children.size(); ++i) {
                     branch_end.back() = (i == children.size() - 1);
-                    print_node(&children[i], branch_end, n->node().node_name == "list", nest);
+                    print_node(&children[i], branch_end, n->node().node_name.view() == "list", nest);
                 }
                 branch_end.pop_back();
             }

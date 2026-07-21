@@ -28,14 +28,46 @@ namespace modoc {
             }
         }
 
-        string_type(string_type&& s) {
+        [[deprecated("Prefer std::move()")]]
+        string_type(const string_type& s) {
+            owned = s.owned;
+            size = s.size;
+
+            if (owned) {
+                char* temp = new char[size];
+                memcpy(temp, s.ptr, size);
+                ptr = temp;
+            }
+            else ptr = s.ptr;
+        }
+
+        string_type(string_type&& s) noexcept {
             ptr = s.ptr;
             size = s.size;
             owned = s.owned;
             s.owned = false;
         }
 
-        string_type& operator=(string_type&& s) {
+        [[deprecated("Prefer std::move()")]]
+        string_type& operator=(const string_type& s) {
+            if (this == &s) return *this;
+            if (owned) delete[] ptr;
+
+            owned = s.owned;
+            size = s.size;
+
+            if (owned) {
+                char* temp = new char[size];
+                memcpy(temp, s.ptr, size);
+                ptr = temp;
+            }
+            else ptr = s.ptr;
+
+            return *this;
+        }
+
+        string_type& operator=(string_type&& s) noexcept {
+            if (this == &s) return *this;
             if (owned) delete[] ptr;
 
             ptr = s.ptr;
@@ -52,6 +84,35 @@ namespace modoc {
 
         bool is_owned() const {
             return owned;
+        }
+
+        void remove_prefix(size_t n) {
+            if (owned) {
+                if (n >= size) {
+                    delete[] ptr;
+                    size = 0;
+                    ptr = nullptr;
+                    owned = false;
+                }
+                else {
+                    size -= n;
+                    char* const temp = new char[size];
+                    memcpy(temp, ptr + n, size);
+                    
+                    delete[] ptr;
+                    ptr = temp;
+                }
+            }
+            else {
+                if (n >= size) {
+                    size = 0;
+                    ptr = nullptr;
+                }
+                else {
+                    size -= n;
+                    ptr += n;
+                }
+            }
         }
 
         ~string_type() {

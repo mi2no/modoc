@@ -4,7 +4,7 @@
 #include "value.hpp"
 
 // Pastes child nodes in every place where utree[i].is_insert()
-void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, std::vector<modoc::uninitialized_tree::unode> children) {
+void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const std::vector<modoc::uninitialized_tree::unode>& children) {
     for (auto itr = utree.begin(); itr != utree.end(); ++itr) {
         modoc::uninitialized_tree::unode& un = *itr;
 
@@ -23,26 +23,33 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
         const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
         options_t map;
 
-        if (nt.options.size()) {
-            parse_options(nt.options, map, get_var_func);
-            for (auto& e : map)
-                printf("[%.*s : %s]\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
+        {
+            std::string_view options = nt.options.view();
+            if (options.size()) {
+                parse_options(options, map, get_var_func);
+                for (auto& e : map)
+                    printf("[%.*s : %s]\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
+            }
         }
 
-        printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
-        node* n = node_factories.at(nt.node_name)->instance(depth, map);
-        
-        if (nt.meta.size()) {
-            map.clear();
-            parse_options(nt.meta, map, get_var_func);
-            for (auto& e : map)
-                printf("{%.*s : %s}\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
-            n->add_meta(map);
+        //printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
+        node* n = node_factories.at(nt.node_name.view())->instance(depth, map);
+       
+        {
+            std::string_view meta = nt.meta.view();
+            if (meta.size()) {
+                map.clear();
+                parse_options(meta, map, get_var_func);
+                for (auto& e : map)
+                    printf("{%.*s : %s}\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
+                n->add_meta(map);
+            }
         }
 
         // Handling the first child text node
         if (n->scope_end() != scope_end::START && nt.children.size() && nt.children.front().is_text()) {
-            std::string_view& view = nt.children.front().text();
+            modoc::string_type& str = nt.children.front().text();
+            const std::string_view view = str.view();
             const char* end;
 
             switch (n->scope_end()) {
@@ -57,7 +64,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             if (n->verbatim()) n->parse_verbatim({view.begin(), end});
             else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
 
-            if (end < view.end()) view.remove_prefix(end - view.begin()); // Move begin to end
+            if (end < view.end()) str.remove_prefix(end - view.begin()); // Move begin to end
             else {
                 nt.children.erase(nt.children.begin()); // Remove text node
                 puts("<erased>");
@@ -101,7 +108,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             return result;
         }
     }
-    else return {new text_node(tokenize(un.text()))};
+    else return {new text_node(tokenize(un.text().view()))};
 }
 
 modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth) {

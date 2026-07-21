@@ -58,7 +58,7 @@ struct repeat_node : special_node {
         result.reserve((size_t)(to - from) * 2);
 
         for (double i = from; i < to; ++i) {
-            result.push_back({"assign", "", "overwrite = true", "i = 1"});
+            result.push_back({{"assign", false}, {"", false}, {"overwrite = true", false}, {"i = 1", false}});
             result.push_back({true});
         }
 

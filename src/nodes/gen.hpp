@@ -94,7 +94,8 @@ public:
                 puts("[@gen] modoc:");
                 puts(out);
 
-                return modoc::uninitialized_tree::parse_document(out).nodes;
+                v = modoc::uninitialized_tree::parse_document(out, true).nodes;
+                break;
             case JSON:
             {
                 /*puts("[@gen] json:");
