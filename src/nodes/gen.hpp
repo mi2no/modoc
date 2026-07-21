@@ -97,7 +97,7 @@ public:
                 return modoc::uninitialized_tree::parse_document(out).nodes;
             case JSON:
             {
-                puts("[@gen] json:");
+                /*puts("[@gen] json:");
                 json::pretty_print(out);
 
                 const char* ptr = out;
@@ -159,7 +159,7 @@ public:
                         }
                     }
                     else stack.push({top->infos[top->ind].children, 0, curr});
-                }
+                }*/
             }
         }
 

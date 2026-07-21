@@ -9,6 +9,9 @@
 #include <cstdio>
 #include <list>
 
+#include "string_type.hpp"
+#include "value.hpp"
+
 namespace modoc {
 
     constexpr char KEYWORD_CHAR = '@';
@@ -37,11 +40,17 @@ namespace modoc {
                 std::vector<unode> children;
             };
 
+            struct node_serialized {
+                modoc::string_type name;
+                std::vector<unode> children;
+                std::unordered_map<std::string_view, const char*> map;
+            };
+
             using value_type = std::variant<
                 node_type,
-                std::string_view,
-                bool,
-                std::unordered_map<std::string_view, const char*>
+                std::string_view, // text
+                bool//, // <insert>
+                //node_serialized
             >;
 
             value_type _value;
@@ -49,10 +58,17 @@ namespace modoc {
             unode(bool) : _value(true) {}
             unode(std::string_view view) : _value(view) {}
             unode(std::string_view name, std::string_view tags, std::string_view options, std::string_view meta) : _value(node_type{name, tags, options, meta, {}}) {}
-            unode(std::unordered_map<std::string_view, const char*> serialized) : _value(serialized) {}
+            /*unode(const std::unordered_map<std::string_view, const char*>& serialized) {
+                const modoc::string_type name = serialized.contains("name") ? {serialized.at("name"), true} : {"group", false};
+                _value = node_serialized{serialized.at("name")};
+            }*/
 
             bool is_node() const {
                 return _value.index() == 0;
+            }
+
+            bool is_text() const {
+                return _value.index() == 1;
             }
 
             bool is_insert() const {
@@ -67,7 +83,11 @@ namespace modoc {
                 return std::get<node_type>(_value);
             }
 
-            std::string_view text() const {
+            std::string_view& text() {
+                return std::get<std::string_view>(_value);
+            }
+
+            const std::string_view& text() const {
                 return std::get<std::string_view>(_value);
             }
 
@@ -84,7 +104,15 @@ namespace modoc {
             }
         };
 
+        /*struct layered_var {
+            value value;
+            uint32_t begin_ind;
+        };*/
+
         std::vector<unode> nodes;
+        
+        /*std::map<modoc::string_type, std::stack<layered_var>> variables;
+        uint32_t ind = 0;*/
 
         static uninitialized_tree parse_document(const char* buffer) {
             uninitialized_tree result;

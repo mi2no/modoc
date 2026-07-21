@@ -35,6 +35,10 @@ struct assign_node : special_node {
         for (const modoc::string_type& s : tokens) content += s.view();
     }
 
+    void parse_verbatim(std::string_view str) override {
+        content = str;
+    }
+
     void debug_print() const override {
         printf("[assign] %s\n", content.c_str());
     }
@@ -47,9 +51,11 @@ struct assign_node : special_node {
         options_t assigned; 
         parse_options(content, assigned);
 
-        /*for (const auto& entry : assigned) {
-            variables[entry.first] = entry.second;
-        }*/ // TODO: use function of subtree to add variables
+        for (auto& entry : assigned) {
+            printf("[assign] %.*s = %s\n", (int)entry.first.size(), entry.first.data(), entry.second.to_string().c_str());
+            subtree.assign(entry.first, std::move(entry.second));
+            //variables[entry.first] = entry.second;
+        } // TODO: use function of subtree to add variables
 
         return {};
     }

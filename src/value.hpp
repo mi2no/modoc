@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <span>
@@ -14,7 +15,8 @@
 struct value;
 
 static std::unordered_map<std::string_view, value> constants;
-static std::map<std::string_view, value> variables;
+
+typedef std::map<std::string_view, value> options_t;
 
 struct value {
 
@@ -74,6 +76,13 @@ struct value {
         }
     }
 
+    value(value&& v) {
+        type = v.type;
+        data = v.data;
+
+        v.type = NONE;
+    }
+
     value& operator=(const value& v) {
         type = v.type;
         data = v.data;
@@ -86,6 +95,15 @@ struct value {
             data.list.ptr = new value[data.list.size];
             for (size_t i = 0; i < data.list.size; ++i) data.list.ptr[i] = v.data.list.ptr[i];
         }
+
+        return *this;
+    }
+    
+    value& operator=(value&& v) {
+        type = v.type;
+        data = v.data;
+
+        v.type = NONE;
 
         return *this;
     }
@@ -146,7 +164,7 @@ struct value {
         if (end != nullptr) *end = str;
     }
 
-    static value _parse(const char*& str) {
+    static value _parse(const char*& str, std::function<const value*(std::string_view)> get_variable = nullptr) {
         value result;
 
         while (*str == ' ' || *str == '\n') ++str;
@@ -171,7 +189,7 @@ struct value {
             size_t init = 0;
             ++str;
             while (*str != ']') {
-                list.ptr[init] = _parse(str);
+                list.ptr[init] = _parse(str, get_variable);
                 if (list.ptr[init].type != NONE) ++init;
                 
                 while (*str != ',' && *str != ']') ++str;
@@ -182,7 +200,7 @@ struct value {
         else {
             char* end = (char*)str + 4;
             
-            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
+            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = true;
                 str = end;
@@ -190,7 +208,7 @@ struct value {
             }
 
             ++end;
-            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
+            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = false;
                 str = end;
@@ -198,7 +216,7 @@ struct value {
             }
             
             const double num = strtod(str, &end);
-            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}')) {
+            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
                 result.type = NUMBER;
                 result.data.number = num;
                 str = end;
@@ -212,8 +230,9 @@ struct value {
             std::string_view name = {str, end};
             str = end;
 
-            if (variables.contains(name)) {
-                result = variables.at(name);
+            const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
+            if (v != nullptr) {
+                result = *v;
             }
             else if (constants.contains(name))
                 result = constants.at(name);
@@ -222,8 +241,8 @@ struct value {
         return result;
     }
 
-    static value parse(const char* str) {
-        return _parse(str); 
+    static value parse(const char* str, std::function<const value*(std::string_view)> get_variable = nullptr) {
+        return _parse(str, get_variable); 
     }
 
     bool boolean() const {
@@ -272,9 +291,7 @@ struct value {
     }
 };
 
-typedef std::map<std::string_view, value> options_t;
-
-static size_t parse_options(const char* ptr, options_t& ops, const char term = ']') {
+static size_t parse_options(const char* ptr, options_t& ops, std::function<const value*(std::string_view)> get_variable = nullptr, const char term = ']') {
     std::string_view option;
     const char* begin = nullptr;
     bool is_value = false;
@@ -294,7 +311,7 @@ static size_t parse_options(const char* ptr, options_t& ops, const char term = '
             }
         }
         else if (*ptr > ' ' && *ptr != '=') {
-            ops[option] = value::_parse(ptr);
+            ops[option] = value::_parse(ptr, get_variable);
             is_value = false;
             if (*ptr == term || *ptr == '\0') break;
         }
@@ -304,7 +321,7 @@ static size_t parse_options(const char* ptr, options_t& ops, const char term = '
     return ptr - b;
 }
 
-static void parse_options(std::string_view view, options_t& ops) {
+static void parse_options(std::string_view view, options_t& ops, std::function<const value*(std::string_view)> get_variable = nullptr) {
     std::string_view option;
     const char* begin = nullptr;
     bool is_value = false;
@@ -321,23 +338,18 @@ static void parse_options(std::string_view view, options_t& ops) {
             }
         }
         else if (*ptr > ' ' && *ptr != '=') {
-            ops[option] = value::_parse(ptr);
+            ops[option] = value::_parse(ptr, get_variable);
             is_value = false;
         }
     }
 }
 
-
-static std::string evaluate(const char* str, const char** end) {
-    const value v = value::_parse(str);
+static std::string evaluate(const char* str, const char** end, std::function<const value*(std::string_view)> get_variable = nullptr) {
+    const value v = value::_parse(str, get_variable);
     if (end != nullptr) *end = str;
     return v.to_string();
 }
 
 static void register_constant(std::string_view name, const value& v) {
     constants[name] = v;
-}
-
-static void register_variable(std::string_view name, const value& v) {
-    variables[name] = v;
 }

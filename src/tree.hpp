@@ -36,23 +36,31 @@ namespace modoc {
             }
     }
 
-    static std::vector<modoc::string_type> tokenize(std::string_view str) { // TODO: add evaluation (EVALUATE_CHAR)
+    static std::vector<modoc::string_type> tokenize(std::string_view str, std::function<const value*(std::string_view)> get_variable = nullptr) { // TODO: add evaluation (EVALUATE_CHAR)
         std::vector<modoc::string_type> tokens;
-        size_t token_begin;
-        bool token = false;
+        const char *token = nullptr;
 
-        for (auto itr = str.begin(); itr != str.end(); ++itr) {
-            if (token && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
-                tokens.emplace_back(std::string_view{str.begin() + token_begin, itr}, false);
-                token = false;
+        for (auto itr = str.begin(); itr < str.end(); ++itr) {
+            if (token != nullptr && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
+                tokens.emplace_back(std::string_view{token, itr}, false);
+                token = nullptr;
             }
-            else if (!token) {
-                token = true;
-                token_begin = itr - str.begin();
+            else if (token == nullptr) {
+                if (*itr == EVALUATE_CHAR) {
+                    tokens.emplace_back(evaluate(itr + 1, &itr, get_variable), true);
+                    printf("off: %zu\nend: %d\n", str.end() - itr, (int)*str.end());
+                }
+                else if (*itr != ' ' && *itr != '\t' && *itr != '\n') token = itr;   
             }
         }
 
-        if (token) tokens.emplace_back(std::string_view{str.begin() + token_begin, str.end()}, false);
+        if (token != nullptr) tokens.emplace_back(std::string_view{token, str.end()}, false);
+
+        for (auto& t : tokens) {
+            const std::string_view view = t.view();
+            printf("\"%.*s\"\n", (int)view.size(), view.data());
+        }
+        fflush(stdout);
 
         return tokens;
     }
@@ -170,20 +178,62 @@ namespace modoc {
     }*/
 
     struct tree {
+
+        struct layered_var {
+            value v;//value;
+            uint32_t begin_ind;
+        };
+
         std::vector<node*> nodes;
-        std::map<std::string_view, value> variables;
+        std::map</*modoc::string_type*/std::string, std::stack<layered_var>> variables;
+        uint32_t ind = 0;
 
     private:
 
-        static std::vector<node*> initialize_node(tree& tree, const uninitialized_tree::unode& un, const uint8_t depth); 
-        static tree initialize(const std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0);
+        static std::vector<node*> initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth); 
+        static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0);
 
         void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
 
     public:
 
+        tree() = default;
+
+        tree(tree&& t) {
+            nodes = std::move(t.nodes);
+            variables = std::move(t.variables);
+            ind = t.ind;
+
+            t.nodes.clear();
+            t.variables.clear();
+        }
+
         static tree initialize(uninitialized_tree u_tree) {
             return initialize(u_tree.nodes, 0);
+        }
+
+        void assign(std::string_view _name, value&& v) {
+            std::string name = std::string(_name);
+            
+            printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
+            if (variables.contains(name)) {
+                auto& stack = variables.at(name);
+                if (stack.top().begin_ind == nodes.size() - 1) stack.top().v/*alue*/ = std::move(v);
+                else stack.push({std::move(v), (uint32_t)nodes.size() - 1});
+            }
+            else {
+                auto& stack = variables[name] = {};
+                variables[name].push({std::move(v), (uint32_t)nodes.size() - 1});
+            }
+
+            printf("Variables: %zu\n", variables.size());
+        }
+
+        const value* get_variable(std::string_view _name) const {
+            std::string name = std::string(_name);
+            
+            if (variables.contains(name)) return &variables.at(name).top().v;
+            else return nullptr;
         }
 
         void print() {
@@ -194,6 +244,17 @@ namespace modoc {
             for (size_t i = 0; i < nodes.size(); ++i) {
                 branch_end.back() = i == nodes.size() - 1;
                 print_node(nodes[i], branch_end, false);
+            }
+
+            printf("Variables: %zu\n", variables.size());
+            for (const auto& entry : variables) {
+                auto stack = entry.second;
+                printf("$%s:\n", entry.first.c_str());
+                
+                while (stack.size()) {
+                    printf("\t%u : %s\n", stack.top().begin_ind, stack.top().v.to_string().c_str());
+                    stack.pop();
+                }
             }
         }
 
@@ -206,6 +267,8 @@ namespace modoc {
         }
 
         ~tree() {
+            //print();
+            fflush(stdout);
             destroy_tree(nodes);
         }
     };

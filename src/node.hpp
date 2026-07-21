@@ -37,6 +37,8 @@ struct node {
     virtual void add_node(node*) = 0;
     virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
 
+    virtual void parse_verbatim(std::string_view str) {}
+
     virtual void add_meta(const options_t& meta) {
         for (const auto& entry : meta)
             this->meta[entry.first] = entry.second;
@@ -117,9 +119,9 @@ struct text_node : node {
     }
 
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         printf("[text](%.*s)\n", (int)tokens[0].view().size(), tokens[0].view().data());
-    }
+    }*/
 
 
     const std::vector<node*>* child_nodes() const override {
@@ -346,7 +348,7 @@ struct list_node : node {
     }
     
     uint8_t scope_end() override {
-        return scope_end::ENDL;
+        return scope_end::START;
     }
 
 

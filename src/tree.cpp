@@ -17,13 +17,14 @@ void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, std::v
     } 
 }
 
-std::vector<node*> modoc::tree::initialize_node(tree& tree, const uninitialized_tree::unode& un, const uint8_t depth) {
+std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth) {
     if (un.is_node()) {
-        const uninitialized_tree::unode::node_type& nt = un.node();
+        uninitialized_tree::unode::node_type& nt = un.node();
+        const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
         options_t map;
 
         if (nt.options.size()) {
-            parse_options(nt.options, map);
+            parse_options(nt.options, map, get_var_func);
             for (auto& e : map)
                 printf("[%.*s : %s]\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
         }
@@ -33,27 +34,56 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, const uninitialized_
         
         if (nt.meta.size()) {
             map.clear();
-            parse_options(nt.meta, map);
+            parse_options(nt.meta, map, get_var_func);
             for (auto& e : map)
                 printf("{%.*s : %s}\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
             n->add_meta(map);
         }
 
+        // Handling the first child text node
+        if (n->scope_end() != scope_end::START && nt.children.size() && nt.children.front().is_text()) {
+            std::string_view& view = nt.children.front().text();
+            const char* end;
+
+            switch (n->scope_end()) {
+                case scope_end::ENDL:
+                    end = view.data();
+                    while (*end != '\n' && end != view.end()) ++end; // Move to endl or end of text
+                    break;
+                case scope_end::ENDSCP:
+                    end = view.end(); 
+            }
+
+            if (n->verbatim()) n->parse_verbatim({view.begin(), end});
+            else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
+
+            if (end < view.end()) view.remove_prefix(end - view.begin()); // Move begin to end
+            else {
+                nt.children.erase(nt.children.begin()); // Remove text node
+                puts("<erased>");
+            }
+        }
+
         if (n->is_primitive()) {
-            modoc::tree initialized = initialize(nt.children, depth + 1);
+            modoc::tree initialized = std::move(initialize(nt.children, depth + 1));
             
             for (node* child : initialized.nodes) n->add_node(child);
             initialized.nodes.clear();
+
+            printf("Initialized primitive [%s]\n", n->type());
+            fflush(stdout);
 
             return {n};
         }
         else {
             std::vector<uninitialized_tree::unode> expanded = ((special_node*)n)->expand(tree);
+            printf("Initialized special [%s]\n", n->type());
+            fflush(stdout);
             delete n;
 
             paste_children(expanded, nt.children);
             
-            modoc::tree initialized = modoc::tree::initialize(expanded, depth);
+            modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth));
             std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 
@@ -63,10 +93,10 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, const uninitialized_
     else return {new text_node(tokenize(un.text()))};
 }
 
-modoc::tree modoc::tree::initialize(const std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth) {
+modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth) {
     tree result;
 
-    for (const uninitialized_tree::unode& un : unodes) {
+    for (uninitialized_tree::unode& un : unodes) {
         std::vector<node*> initialized = initialize_node(result, un, depth);
         std::move(initialized.begin(), initialized.end(), std::back_inserter(result.nodes));
     }
