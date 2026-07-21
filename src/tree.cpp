@@ -73,6 +73,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             printf("Initialized primitive [%s]\n", n->type());
             fflush(stdout);
 
+            //tree.nodes.push_back(n);
             return {n};
         }
         else {
@@ -86,6 +87,16 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth));
             std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
+
+            const uint32_t off = tree.nodes.size();
+            for (auto& entry : initialized.variables) {
+                auto stack = entry.second;
+
+                while (stack.size()) {
+                    tree._assign_at(entry.first, std::move(stack.top().v), off + stack.top().begin_ind);
+                    stack.pop();
+                }
+            }
 
             return result;
         }

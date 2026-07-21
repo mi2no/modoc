@@ -186,7 +186,7 @@ namespace modoc {
 
         std::vector<node*> nodes;
         std::map</*modoc::string_type*/std::string, std::stack<layered_var>> variables;
-        uint32_t ind = 0;
+        //uint32_t ind = 0;
 
     private:
 
@@ -195,6 +195,23 @@ namespace modoc {
 
         void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
 
+        void _assign_at(std::string_view _name, value&& v, uint32_t ind) {
+            std::string name = std::string(_name);
+            
+            printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
+            if (variables.contains(name)) {
+                auto& stack = variables.at(name);
+                if (stack.top().begin_ind == ind) stack.top().v/*alue*/ = std::move(v);
+                else stack.push({std::move(v), ind});
+            }
+            else {
+                auto& stack = variables[name] = {};
+                variables[name].push({std::move(v), ind});
+            }
+            printf("Variables: %zu\n", variables.size());
+        }
+
+
     public:
 
         tree() = default;
@@ -202,7 +219,7 @@ namespace modoc {
         tree(tree&& t) {
             nodes = std::move(t.nodes);
             variables = std::move(t.variables);
-            ind = t.ind;
+            //ind = t.ind;
 
             t.nodes.clear();
             t.variables.clear();
@@ -212,21 +229,8 @@ namespace modoc {
             return initialize(u_tree.nodes, 0);
         }
 
-        void assign(std::string_view _name, value&& v) {
-            std::string name = std::string(_name);
-            
-            printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
-            if (variables.contains(name)) {
-                auto& stack = variables.at(name);
-                if (stack.top().begin_ind == nodes.size() - 1) stack.top().v/*alue*/ = std::move(v);
-                else stack.push({std::move(v), (uint32_t)nodes.size() - 1});
-            }
-            else {
-                auto& stack = variables[name] = {};
-                variables[name].push({std::move(v), (uint32_t)nodes.size() - 1});
-            }
-
-            printf("Variables: %zu\n", variables.size());
+        void assign(std::string_view name, value&& v) {
+            _assign_at(name, std::move(v), nodes.size());
         }
 
         const value* get_variable(std::string_view _name) const {
