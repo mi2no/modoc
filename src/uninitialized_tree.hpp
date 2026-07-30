@@ -163,7 +163,7 @@ namespace modoc {
                         const std::string_view name = {name_begin, buffer + i};
                         std::string_view tags, options, meta;
 
-                        printf("%.*s %zu\n", (int)name.size(), name.data(), stack.size());
+                        //printf("%.*s %zu\n", (int)name.size(), name.data(), stack.size());
 
                         while (buffer[i] == '(' || buffer[i] == '[' || buffer[i] == '{') {
                             if (buffer[i] == '(') {

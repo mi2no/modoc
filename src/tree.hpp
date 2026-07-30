@@ -48,7 +48,7 @@ namespace modoc {
             else if (token == nullptr) {
                 if (*itr == EVALUATE_CHAR) {
                     tokens.emplace_back(evaluate(itr + 1, &itr, get_variable), true);
-                    printf("off: %zu\nend: %d\n", str.end() - itr, (int)*str.end());
+                    //printf("off: %zu\nend: %d\n", str.end() - itr, (int)*str.end());
                 }
                 else if (*itr != ' ' && *itr != '\t' && *itr != '\n') token = itr;   
             }
@@ -56,11 +56,11 @@ namespace modoc {
 
         if (token != nullptr) tokens.emplace_back(std::string_view{token, str.end()}, false);
 
-        for (auto& t : tokens) {
+        /*for (auto& t : tokens) {
             const std::string_view view = t.view();
             printf("\"%.*s\"\n", (int)view.size(), view.data());
         }
-        fflush(stdout);
+        fflush(stdout);*/
 
         return tokens;
     }
@@ -198,7 +198,7 @@ namespace modoc {
         void _assign_at(std::string_view _name, value&& v, uint32_t ind) {
             std::string name = std::string(_name);
             
-            printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
+            //printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
             if (variables.contains(name)) {
                 auto& stack = variables.at(name);
                 if (stack.top().begin_ind == ind) stack.top().v/*alue*/ = std::move(v);
@@ -208,7 +208,7 @@ namespace modoc {
                 auto& stack = variables[name] = {};
                 variables[name].push({std::move(v), ind});
             }
-            printf("Variables: %zu\n", variables.size());
+            //printf("Variables: %zu\n", variables.size());
         }
 
 

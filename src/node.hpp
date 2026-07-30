@@ -119,9 +119,9 @@ struct text_node : node {
     }
 
 
-    /*void debug_print() const override {
-        printf("[text](%.*s)\n", (int)tokens[0].view().size(), tokens[0].view().data());
-    }*/
+    void debug_print() const override {
+        printf("[text](%zu)\n", tokens.size());
+    }
 
 
     const std::vector<node*>* child_nodes() const override {
