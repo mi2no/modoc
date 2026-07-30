@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "log.hpp"
+
 #include "node.hpp"
 //#include "options.hpp"
 #include "value.hpp"
@@ -115,6 +117,12 @@ bool str_match(const char* a, const char* b) {
 int main(int argc, char** argv) {
 
     // ./main [src_file] --backend
+    
+    {
+        modoc::logger log;
+        std::cout << log.to_string("modoc", "modoc init\nthis is a test\nThis line is pretty long, hope it gets split to multiple ones!");
+        log.log("modoc", "modoc init\nthis is a test\nThis line is pretty long, hope it gets split to multiple ones!");
+    }
     
     std::vector<std::string> backends;
     get_backends(backends);
