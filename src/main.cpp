@@ -118,11 +118,9 @@ int main(int argc, char** argv) {
 
     // ./main [src_file] --backend
     
-    {
+    //{
         modoc::logger log;
-        std::cout << log.to_string("modoc", "modoc init\nthis is a test\nThis line is pretty long, hope it gets split to multiple ones!");
-        log.log("modoc", "modoc init\nthis is a test\nThis line is pretty long, hope it gets split to multiple ones!");
-    }
+    //}
     
     std::vector<std::string> backends;
     get_backends(backends);
@@ -207,6 +205,9 @@ int main(int argc, char** argv) {
 
     modoc::tree tree = modoc::tree::initialize(std::move(un_tree));
     tree.print();
+
+    log.width = 60;
+    log.log("modoc", "core tree", tree.to_string());
 
     /*if (!modoc::primitives_only) {
         puts("To primitives:\n");

@@ -194,6 +194,8 @@ namespace modoc {
         static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0);
 
         void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
+        std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
+
 
         void _assign_at(std::string_view _name, value&& v, uint32_t ind) {
             std::string name = std::string(_name);
@@ -240,7 +242,7 @@ namespace modoc {
             else return nullptr;
         }
 
-        void print() {
+        void print() const {
             puts("\u25CF");
             std::list<bool> branch_end;
             branch_end.push_back(false);
@@ -260,6 +262,30 @@ namespace modoc {
                     stack.pop();
                 }
             }
+        }
+        
+        std::string to_string() const {
+            std::string result = "\u25CF\n";
+            std::list<bool> branch_end;
+            branch_end.push_back(false);
+
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                branch_end.back() = i == nodes.size() - 1;
+                result += node_to_str(nodes[i], branch_end, false);
+            }
+
+            /*printf("Variables: %zu\n", variables.size());
+            for (const auto& entry : variables) {
+                auto stack = entry.second;
+                printf("$%s:\n", entry.first.c_str());
+                
+                while (stack.size()) {
+                    printf("\t%u : %s\n", stack.top().begin_ind, stack.top().v.to_string().c_str());
+                    stack.pop();
+                }
+            }*/
+
+            return result;
         }
 
         void destroy_node(node* n);

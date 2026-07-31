@@ -2,6 +2,7 @@
 #include "node.hpp"
 #include "uninitialized_tree.hpp"
 #include "value.hpp"
+#include <string>
 
 // Pastes child nodes in every place where utree[i].is_insert()
 void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const std::vector<modoc::uninitialized_tree::unode>& children) {
@@ -160,6 +161,42 @@ void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is
             branch_end.pop_back();
         }
     }
+
+std::string modoc::tree::node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
+    std::string result;
+
+    for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
+        if (!*itr) result += "\u2502  ";
+        else result += "   ";
+    }
+
+    if (!branch_end.back()) result += "\u251C";
+    else result += "\u2514"; 
+
+    if (is_list_elm) result += "\u2500\u25A1"; // \u25CF - full circle  \u25EF - circle
+    else result += "\u2500\u2500";
+
+    result += '[';
+    result += std::to_string(n->type_id());
+    result += ']';
+    result += n->to_string();
+    result += '\n';
+    ++nest;
+
+    const std::vector<node*>* children = n->child_nodes();
+    
+    if (children != nullptr) {
+        branch_end.push_back(false);
+        for (size_t i = 0; i < children->size(); ++i) {
+            branch_end.back() = (i == children->size() - 1);
+            result += node_to_str((*children)[i], branch_end, debug_str_match(n->type(), "list"), nest);
+        }
+        branch_end.pop_back();
+    }
+
+    return result;
+}
+
 
 void modoc::tree::destroy_node(node* n) {
     const std::vector<node*>* children = n->child_nodes();

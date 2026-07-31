@@ -52,6 +52,12 @@ struct node {
     virtual void debug_print() const {
         printf("[%s]\n", type());
     }
+    
+    virtual std::string to_string() const {
+        std::string result = "[";
+        result += type();
+        return result += ']';
+    }
 
     virtual bool verbatim() const {
         return false;
@@ -265,6 +271,26 @@ struct sec_node : node {
         }
         puts(title.c_str());
     }
+
+    std::string to_string() const override {
+        std::string result;
+        if (id != nullptr) {
+            result += std::to_string(id[0]);
+            for (uint8_t i = 1; i < depth + 1; ++i) {
+                result += '.';
+                result += std::to_string(id[i]);
+            }
+            result += ' ';
+        }
+        else {
+            result += '?';
+            for (uint8_t i = 1; i < depth + 1; ++i)
+                result += ".?";
+            result += ' ';
+        }
+        return result += title.c_str();
+    }
+
 
     void final_pass() override {
         /*const uint8_t nums = depth + 1;

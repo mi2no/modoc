@@ -9,6 +9,7 @@
 
 #include "../node.hpp"
 #include "../tree.hpp"
+#include "../log.hpp"
 
 #include "../../../serialize/serialize.hpp"
 
@@ -87,12 +88,13 @@ public:
 
         close(fd);
         unlink(path);
-
+                
+        modoc::logger log;
         std::vector<modoc::uninitialized_tree::unode> v;
+
         switch (mode) {
             case MODOC:
-                puts("[@gen] modoc:");
-                puts(out);
+                log.log("@gen", "modoc", out);
 
                 v = modoc::uninitialized_tree::parse_document(out, true).nodes;
                 break;
@@ -166,7 +168,8 @@ public:
 
         delete[] out;
 
-        puts("Evaluated subtree:");
+        //log.log("@gen", "evaluated subtree", )
+        //puts("Evaluated subtree:");
         //modoc::print_doc_tree(v);
 
         return v;
