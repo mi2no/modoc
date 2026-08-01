@@ -35,9 +35,22 @@ namespace modoc {
         static constexpr const char* INNER = "\u254C";
         static constexpr const char* INNER_RIGHT = "\u2562";
 
-        static constexpr uint8_t char_width(uint8_t c) {
-            const uint8_t n = std::countl_one(c);
-            return std::max(n, (uint8_t)1u);
+        struct char_info_t {
+            uint8_t bytes;
+            uint8_t vs_width;
+        };
+
+        static constexpr char_info_t char_info(const char* ptr) {
+            char c = *ptr;
+            if (c == '\t') return {1, 6};
+            if (c == '\033' && ptr[1] == '[') {
+                char_info_t info = {2, 0};
+                while (ptr[info.bytes] < 0x40 || ptr[info.bytes] > 0x7E) ++info.bytes;
+                ++info.bytes;
+                return info;
+            }
+            const uint8_t n = std::countl_one((uint8_t)c);
+            return {std::max(n, (uint8_t)1u), 1};
         }
 
     private:
@@ -59,14 +72,14 @@ namespace modoc {
                 else if (visual_width == width) {
                     result.emplace_back(begin, ptr);
                     begin = ptr;
-                    const uint8_t n = char_width(*ptr);
-                    ptr += n - 1;
-                    visual_width = 1;
+                    const char_info_t info = char_info(ptr);
+                    ptr += info.bytes - 1;
+                    visual_width = info.vs_width;
                 }
                 else {
-                    const uint8_t n = char_width(*ptr);
-                    ptr += n - 1;
-                    ++visual_width;
+                    const char_info_t info = char_info(ptr);
+                    ptr += info.bytes - 1;
+                    visual_width += info.vs_width;
                 }
                 ++ptr;
             }

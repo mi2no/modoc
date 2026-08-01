@@ -273,7 +273,7 @@ struct sec_node : node {
     }
 
     std::string to_string() const override {
-        std::string result;
+        std::string result = "\033[35m";
         if (id != nullptr) {
             result += std::to_string(id[0]);
             for (uint8_t i = 1; i < depth + 1; ++i) {
@@ -288,6 +288,7 @@ struct sec_node : node {
                 result += ".?";
             result += ' ';
         }
+        result += "\033[0m";
         return result += title.c_str();
     }
 

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -54,7 +55,7 @@
 
 #include <dlfcn.h>
 
-void to_doc(const std::vector<node*>& tree, const char* backend_path) {
+double to_doc(const modoc::tree& tree, const char* backend_path) {
     void* handle = dlopen(backend_path, RTLD_LAZY);
 
     if (!handle) {
@@ -69,7 +70,10 @@ void to_doc(const std::vector<node*>& tree, const char* backend_path) {
         fputs("Error 2\n", stderr);
     }
 
-    f_handle(tree);
+    const auto start = std::chrono::high_resolution_clock::now();
+    f_handle(tree.nodes);
+
+    return (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start)).count();
 }
 
 void register_node_factory(const char* sym, node_factory* nf) {
@@ -216,11 +220,11 @@ int main(int argc, char** argv) {
     }
 
     modoc::tree_final_pass(tree);
-    modoc::print_doc_tree(tree);
+    modoc::print_doc_tree(tree);*/
 
-    to_doc(tree, backends[backend_id].c_str());
+    const double time = to_doc(tree, backends[backend_id].c_str());
 
-    printf("\nCompiled via %s backend. (%s)\n", argv[2] + 2, backends[backend_id].c_str());*/
+    log.log("modoc", "summary", std::string("Compiled via ") + (argv[2] + 2) + " backend.\nTime: " + std::to_string(time) + "s");
 
     //destroy_tree(tree);
     free(buffer);

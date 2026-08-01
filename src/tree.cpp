@@ -163,7 +163,7 @@ void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is
     }
 
 std::string modoc::tree::node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
-    std::string result;
+    std::string result = "\033[2m";
 
     for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
         if (!*itr) result += "\u2502  ";
@@ -176,9 +176,11 @@ std::string modoc::tree::node_to_str(const node* n, std::list<bool>& branch_end,
     if (is_list_elm) result += "\u2500\u25A1"; // \u25CF - full circle  \u25EF - circle
     else result += "\u2500\u2500";
 
-    result += '[';
+    result += "\033[0m";
+
+    /*result += '[';
     result += std::to_string(n->type_id());
-    result += ']';
+    result += ']';*/
     result += n->to_string();
     result += '\n';
     ++nest;
