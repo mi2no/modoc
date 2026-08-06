@@ -94,9 +94,15 @@ public:
 
         switch (mode) {
             case MODOC:
+                {
                 log.log("@gen", "modoc", out);
 
-                v = modoc::uninitialized_tree::parse_document(out, true).nodes;
+                modoc::uninitialized_tree ut = modoc::uninitialized_tree::parse_document(out, true);
+                ut.print();
+
+                v = std::move(ut.nodes);
+                ut.nodes.clear();
+                }
                 break;
             case JSON:
             {

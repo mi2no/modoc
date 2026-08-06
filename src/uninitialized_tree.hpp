@@ -105,7 +105,7 @@ namespace modoc {
                     if (n.meta.view().size()) printf("{%.*s}", (int)n.meta.view().size(), n.meta.view().data());
                     putchar('\n');
                 }
-                else puts("[text]");
+                else printf("[text] %zu (%.*s)\n", text().view().size(), (int)text().view().size(), text().view().data());
             }
         };
 

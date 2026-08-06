@@ -129,6 +129,10 @@ struct text_node : node {
         printf("[text](%zu)\n", tokens.size());
     }
 
+    std::string to_string() const override {
+        return std::string("[text] (") + std::string(tokens.front().view()) + ')';
+    }
+
 
     const std::vector<node*>* child_nodes() const override {
         return nullptr;

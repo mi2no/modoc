@@ -1,4 +1,5 @@
 #include "tree.hpp"
+#include "log.hpp"
 #include "node.hpp"
 #include "uninitialized_tree.hpp"
 #include "value.hpp"
@@ -18,7 +19,7 @@ void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const 
     } 
 }
 
-std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth) {
+std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text) {
     if (un.is_node()) {
         uninitialized_tree::unode::node_type& nt = un.node();
         const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
@@ -78,7 +79,7 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
         }
 
         if (n->is_primitive()) {
-            modoc::tree initialized = std::move(initialize(nt.children, depth + 1));
+            modoc::tree initialized = std::move(initialize(nt.children, depth + 1, copy_text));
             
             for (node* child : initialized.nodes) n->add_node(child);
             initialized.nodes.clear();
@@ -101,9 +102,14 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             //fflush(stdout);
             delete n;
 
+            modoc::logger log;
+            puts("EXPANDED:");
+            for (uninitialized_tree::unode& un : expanded) un.print();
+
             paste_children(expanded, nt.children);
             
-            modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth));
+            modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth, true));
+            log.log("tree.cpp", "expand initialize", initialized.to_string(), modoc::logger::ERR); 
             std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 
@@ -120,15 +126,16 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             return result;
         }
     }
-    else return {new text_node(tokenize(un.text().view()))}; // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
+    else return {new text_node(tokenize(un.text().view(), nullptr, copy_text))}; // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
 }
 
-modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth) {
+modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth, const bool copy_text) {
     tree result;
 
     for (uninitialized_tree::unode& un : unodes) {
-        std::vector<node*> initialized = initialize_node(result, un, depth);
+        std::vector<node*> initialized = initialize_node(result, un, depth, copy_text);
         std::move(initialized.begin(), initialized.end(), std::back_inserter(result.nodes));
+        initialized.clear();
     }
 
     return result;

@@ -36,13 +36,13 @@ namespace modoc {
             }
     }
 
-    static std::vector<modoc::string_type> tokenize(std::string_view str, std::function<const value*(std::string_view)> get_variable = nullptr) { // TODO: add evaluation (EVALUATE_CHAR)
+    static std::vector<modoc::string_type> tokenize(std::string_view str, std::function<const value*(std::string_view)> get_variable = nullptr, bool copy = false) { // TODO: add evaluation (EVALUATE_CHAR)
         std::vector<modoc::string_type> tokens;
         const char *token = nullptr;
 
         for (auto itr = str.begin(); itr < str.end(); ++itr) {
             if (token != nullptr && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
-                tokens.emplace_back(std::string_view{token, itr}, false);
+                tokens.emplace_back(std::string_view{token, itr}, copy);
                 token = nullptr;
             }
             else if (token == nullptr) {
@@ -54,7 +54,7 @@ namespace modoc {
             }
         }
 
-        if (token != nullptr) tokens.emplace_back(std::string_view{token, str.end()}, false);
+        if (token != nullptr) tokens.emplace_back(std::string_view{token, str.end()}, copy);
 
         /*for (auto& t : tokens) {
             const std::string_view view = t.view();
@@ -190,8 +190,8 @@ namespace modoc {
 
     private:
 
-        static std::vector<node*> initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth); 
-        static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0);
+        static std::vector<node*> initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text = false); 
+        static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0, const bool copy_text = false);
 
         void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
         std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
