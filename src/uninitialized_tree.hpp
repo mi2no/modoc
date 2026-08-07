@@ -77,18 +77,22 @@ namespace modoc {
             }
 
             node_type& node() {
+                if (!is_node()) printf("Is %zu but node was used.\n", _value.index());
                 return std::get<node_type>(_value);
             }
 
             const node_type& node() const {
+                if (!is_node()) printf("Is %zu but node was used.\n", _value.index());
                 return std::get<node_type>(_value);
             }
 
             modoc::string_type& text() {
+                if (!is_text()) printf("Is %zu but text was used.\n", _value.index());
                 return std::get<modoc::string_type>(_value);
             }
 
             const modoc::string_type& text() const {
+                if (!is_text()) printf("Is %zu but text was used.\n", _value.index());
                 return std::get<modoc::string_type>(_value);
             }
 
@@ -105,6 +109,7 @@ namespace modoc {
                     if (n.meta.view().size()) printf("{%.*s}", (int)n.meta.view().size(), n.meta.view().data());
                     putchar('\n');
                 }
+                else if (is_insert()) puts("<insert>");
                 else printf("[text] %zu (%.*s)\n", text().view().size(), (int)text().view().size(), text().view().data());
             }
         };

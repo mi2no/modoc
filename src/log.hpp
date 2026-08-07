@@ -99,7 +99,7 @@ namespace modoc {
         std::string to_string(std::string_view context, std::string_view title, std::string_view content, type_t type = LOG) const {
             std::string result;
 
-            const std::string color = "\033[32m";
+            const std::string color = type == LOG ? "\033[32m" : "\033[31m";
 
             { // name frame ╭───────────────────────╮
                 const uint16_t frame_width = std::min((size_t)width - 2, context.size() + title.size() + 3 /*type*/ + 3 /*spacer*/ + 2 /*frame*/ + 2 /*padding*/ + 3 /* . */);

@@ -34,7 +34,7 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor i
 		
 	@sec color = "blue"
 @sec Gen test $x
-	@if[clause = false]
+	@if[clause = true]
 		@gen[cmd = "cat ../inner.mdoc >> \"$MODOC_OUTPUT_FILE\"", mode = gen.mode.modoc, dummy = color.red]
 		@repeat[to = 2]{color = "red", width = 200}
 			Hello world! $i

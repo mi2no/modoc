@@ -126,6 +126,10 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             return result;
         }
     }
+    else if (un.is_insert()) {
+        modoc::logger log;
+        log.log("init tree", "init node", "dangling insert????", modoc::logger::ERR);
+    }
     else return {new text_node(tokenize(un.text().view(), nullptr, copy_text))}; // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
 }
 
