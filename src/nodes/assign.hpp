@@ -5,6 +5,7 @@
 #include "../node.hpp"
 #include "../tree.hpp"
 #include "../value.hpp"
+#include "../log.hpp"
 
 struct assign_node : special_node {
     inline static uint32_t t_id;
@@ -51,11 +52,20 @@ struct assign_node : special_node {
         options_t assigned; 
         parse_options(content, assigned);
 
+        modoc::logger log;
+        std::string content;
+
         for (auto& entry : assigned) {
-            printf("[assign] %.*s = %s\n", (int)entry.first.size(), entry.first.data(), entry.second.to_string().c_str());
+            content += std::string(entry.first);
+            content += " = ";
+            content += entry.second.to_string();
+            content += '\n';
+
             subtree.assign(entry.first, std::move(entry.second));
             //variables[entry.first] = entry.second;
         } // TODO: use function of subtree to add variables
+
+        log.log("assign", "expand", content);
 
         return {};
     }

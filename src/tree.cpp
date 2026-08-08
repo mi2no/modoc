@@ -102,14 +102,9 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             //fflush(stdout);
             delete n;
 
-            modoc::logger log;
-            puts("EXPANDED:");
-            for (uninitialized_tree::unode& un : expanded) un.print();
-
             paste_children(expanded, nt.children);
             
             modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth, true));
-            log.log("tree.cpp", "expand initialize", initialized.to_string(), modoc::logger::ERR); 
             std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 
@@ -125,10 +120,6 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
 
             return result;
         }
-    }
-    else if (un.is_insert()) {
-        modoc::logger log;
-        log.log("init tree", "init node", "dangling insert????", modoc::logger::ERR);
     }
     else return {new text_node(tokenize(un.text().view(), nullptr, copy_text))}; // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
 }

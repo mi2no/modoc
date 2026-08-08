@@ -118,9 +118,6 @@ std::string node_to_str(const node* n) {
     }
     else if (node::is_type<text_node>(n)) {
         text_node* t = (text_node*)n;
-           
-        modoc::logger log;
-        log.log("htmlNG2", "text-node", "in");//{t->tokens.front().view().begin(), t->tokens.back().view().end()});
 
         if (style.size()) {
             result += "<span ";
@@ -144,8 +141,6 @@ std::string node_to_str(const node* n) {
 
 extern "C" void compile(const std::vector<node*>& tree) {
     FILE* const out = fopen("out.html", "w");
-    modoc::logger log;
-
     std::string result;
 
     result += "<!DOCTYPE HTML>\n<html>";
@@ -258,16 +253,8 @@ extern "C" void compile(const std::vector<node*>& tree) {
     }\n\
     </style>";
 
-    log.log("htmlNG2", "info", std::string("nodes: ") + std::to_string(tree.size()));
-
-    for (const node* n : tree) {
-        if (node::is_type<text_node>(n)) {
-            text_node* t = (text_node*)n;
-            log.log("htmlNG2", "node", {t->tokens.front().view().begin(), t->tokens.back().view().end()});
-        }
-        else log.log("htmlNG2", "node", n->to_string());
-        result += node_to_str(n);
-    }
+    for (const node* n : tree)
+       result += node_to_str(n);
 
     result += "</html>";
 

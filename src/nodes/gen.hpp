@@ -71,8 +71,6 @@ public:
 
     std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
     //std::vector<node*> expand(const std::vector<node*>&) const override {
-        puts("GEN HELLO");
-        fflush(stdout);
         char path[] = "tmp_modoc_outXXXXXX";
         int fd = mkstemp(path);
 
@@ -98,7 +96,7 @@ public:
                 log.log("@gen", "modoc", out);
 
                 modoc::uninitialized_tree ut = modoc::uninitialized_tree::parse_document(out, true);
-                ut.print();
+                log.log("@gen", "uninit tree", ut.to_string());
 
                 v = std::move(ut.nodes);
                 ut.nodes.clear();

@@ -110,7 +110,33 @@ namespace modoc {
                     putchar('\n');
                 }
                 else if (is_insert()) puts("<insert>");
-                else printf("[text] %zu (%.*s)\n", text().view().size(), (int)text().view().size(), text().view().data());
+                else puts("[text]");
+            }
+
+            std::string to_string() const {
+                if (is_node()) {
+                    const node_type& n = std::get<node_type>(_value);
+                    std::string result = std::string("[?") + std::string(n.node_name.view()) + "]";
+
+                    if (n.tags.view().size()) {
+                        result += '(';
+                        result += std::string(n.tags.view());
+                        result += ')';
+                    }
+                    if (n.options.view().size()) {
+                        result += '[';
+                        result += std::string(n.options.view());
+                        result += ']';
+                    }
+                    if (n.meta.view().size()) {
+                        result += '{';
+                        result += std::string(n.meta.view());
+                        result += '}';
+                    }
+                    return result;
+                }
+                else if (is_insert()) return "<insert>";
+                return "[text]";
             }
         };
 
@@ -267,6 +293,69 @@ namespace modoc {
                 branch_end.back() = i == nodes.size() - 1;
                 print_node(&nodes[i], branch_end, false);
             }
+        }
+
+        std::string node_to_str(const unode& n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const {
+            std::string result = "\033[2m";
+
+            for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
+                if (!*itr) result += "\u2502  ";
+                else result += "   ";
+            }
+
+            if (!branch_end.back()) result += "\u251C";
+            else result += "\u2514"; 
+
+            if (is_list_elm) result += "\u2500\u25A1"; // \u25CF - full circle  \u25EF - circle
+            else result += "\u2500\u2500";
+
+            result += "\033[0m";
+
+            /*result += '[';
+            result += std::to_string(n->type_id());
+            result += ']';*/
+            result += n.to_string();
+            result += '\n';
+            ++nest;
+
+            if (n.is_node()) {
+                const std::vector<unode>& children = n.node().children;
+            
+                if (children.size()) {
+                    branch_end.push_back(false);
+                    for (size_t i = 0; i < children.size(); ++i) {
+                        branch_end.back() = (i == children.size() - 1);
+                        result += node_to_str(children[i], branch_end, n.node().node_name.view() == "list", nest);
+                    }
+                    branch_end.pop_back();
+                }
+            }
+
+            return result;
+        }
+
+        std::string to_string() const {
+            std::string result = "\u25CF\n";
+            std::list<bool> branch_end;
+            branch_end.push_back(false);
+
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                branch_end.back() = i == nodes.size() - 1;
+                result += node_to_str(nodes[i], branch_end, false);
+            }
+
+            /*printf("Variables: %zu\n", variables.size());
+            for (const auto& entry : variables) {
+                auto stack = entry.second;
+                printf("$%s:\n", entry.first.c_str());
+                
+                while (stack.size()) {
+                    printf("\t%u : %s\n", stack.top().begin_ind, stack.top().v.to_string().c_str());
+                    stack.pop();
+                }
+            }*/
+
+            return result;
         }
 
     };

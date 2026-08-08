@@ -204,13 +204,12 @@ int main(int argc, char** argv) {
     puts("Document tree structure:\n");
     modoc::print_doc_tree(tree);*/
 
+    log.width = 120;
+
     modoc::uninitialized_tree un_tree = modoc::uninitialized_tree::parse_document(buffer);
-    un_tree.print();
+    log.log("modoc", "uninit tree", un_tree.to_string());
 
     modoc::tree tree = modoc::tree::initialize(std::move(un_tree));
-    tree.print();
-
-    log.width = 60;
     log.log("modoc", "core tree", tree.to_string());
 
     /*if (!modoc::primitives_only) {

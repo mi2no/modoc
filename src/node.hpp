@@ -124,16 +124,6 @@ struct text_node : node {
         for (modoc::string_type& s : new_tokens) tokens.push_back(std::move(s));
     }
 
-
-    void debug_print() const override {
-        printf("[text](%zu)\n", tokens.size());
-    }
-
-    std::string to_string() const override {
-        return std::string("[text] (") + std::string(tokens.front().view()) + ')';
-    }
-
-
     const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
