@@ -27,11 +27,11 @@ struct repeat_node : special_node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
 
-    void add_node(node*) override {}
+    void add_node(node*) override {}*/
 
     void parse_tokens(std::vector<modoc::string_type>&& tokens, uint8_t depth) override {
         while (depth--) modoc += '\t';
@@ -42,10 +42,10 @@ struct repeat_node : special_node {
         modoc += '\n';
     }
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         //printf("[%s](cmd = %s)\n", type(), command.c_str());
         printf("[repeat] %s\n", modoc.c_str());
-    }
+    }*/
 
     bool verbatim() const override {
         return true;

@@ -193,7 +193,7 @@ namespace modoc {
         static std::vector<node*> initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text = false); 
         static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0, const bool copy_text = false);
 
-        void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
+        //void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
         std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
 
 
@@ -242,7 +242,7 @@ namespace modoc {
             else return nullptr;
         }
 
-        void print() const {
+        /*void print() const {
             puts("\u25CF");
             std::list<bool> branch_end;
             branch_end.push_back(false);
@@ -262,7 +262,7 @@ namespace modoc {
                     stack.pop();
                 }
             }
-        }
+        }*/
         
         std::string to_string() const {
             std::string result = "\u25CF\n";

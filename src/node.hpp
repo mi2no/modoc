@@ -33,10 +33,10 @@ struct node {
         return T::t_id == n->type_id();
     }
 
-    virtual const std::vector<node*>* child_nodes() const = 0;
-    virtual void add_node(node*) = 0;
-    virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
+    virtual const std::vector<node*>* child_nodes() const = 0; // TODO: remove
+    virtual void add_node(node*) = 0; // remove?
 
+    virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
     virtual void parse_verbatim(std::string_view str) {}
 
     virtual void add_meta(const options_t& meta) {
@@ -47,11 +47,11 @@ struct node {
         for (const std::)
     }*/
 
-    virtual void final_pass() {}
+    //virtual void final_pass() {} // TODO: remove
 
-    virtual void debug_print() const {
+    /*virtual void debug_print() const {
         printf("[%s]\n", type());
-    }
+    }*/ // TODO: remove
     
     virtual std::string to_string() const {
         std::string result = "[";
@@ -65,7 +65,7 @@ struct node {
 
     virtual bool is_primitive() const {
         return true;
-    }
+    } // TODO: rename to is_core?
     
     virtual ~node() = default;
 };
@@ -81,9 +81,16 @@ struct special_node : node {
     //virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
     virtual std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const = 0;
 
-    virtual bool in_second_pass() const {
+    /*virtual bool in_second_pass() const {
         return false;
+    }*/ // TODO: remove
+        //
+
+    std::vector<node*>* child_nodes() const override final {
+        return nullptr;
     }
+
+    void add_node(node*) override final {};
 
     bool is_primitive() const override final {
         return false;
@@ -141,6 +148,8 @@ struct group_node : node {
     inline static uint32_t t_id;
     
     std::vector<node*> nodes;
+    // replace with:
+    // modoc::tree subtree;
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -185,11 +194,11 @@ struct group_f : node_factory {
     }
 };
 
-struct sec_node : node {
+struct sec_node :  public group_node {
     inline static uint32_t t_id;
     //inline static std::vector<uint8_t> sec_id;
 
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
     std::string title;
 
     uint8_t* id = nullptr;
@@ -227,9 +236,9 @@ struct sec_node : node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return &nodes;
-    }
+    }*/
 
     void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         if (title.empty()) {
@@ -245,12 +254,12 @@ struct sec_node : node {
             nodes.push_back(new text_node(std::move(new_tokens)));
     }
 
-    void add_node(node* n) override {
+    /*void add_node(node* n) override {
         nodes.push_back(n);
-    }
+    }*/
 
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         if (id != nullptr) {
             printf("%hhu", id[0]);
             for (uint8_t i = 1; i < depth + 1; ++i)
@@ -264,7 +273,7 @@ struct sec_node : node {
             putchar(' ');
         }
         puts(title.c_str());
-    }
+    }*/
 
     std::string to_string() const override {
         std::string result = "\033[35m";
@@ -287,7 +296,7 @@ struct sec_node : node {
     }
 
 
-    void final_pass() override {
+    ///void final_pass() override {
         /*const uint8_t nums = depth + 1;
 
         if (sec_id.size() < nums) sec_id.push_back(0);
@@ -299,7 +308,7 @@ struct sec_node : node {
 
         id = new uint8_t[sec_id.size()];
         memcpy(id, sec_id.data(), sec_id.size());*/
-    }
+    //}
 
     ~sec_node() override {
         if (id != nullptr) delete[] id;
@@ -461,9 +470,9 @@ struct code_node : node {
         }
     }
 
-    virtual void debug_print() const override {
+    /*virtual void debug_print() const override {
         printf("[code](lang = %s)\n", lang.c_str());
-    }
+    }*/
 
     const std::vector<node*>* child_nodes() const override {
         return nullptr;

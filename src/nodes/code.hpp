@@ -58,19 +58,19 @@ struct new_code_node : special_node {
         }
     }
 
-    virtual void debug_print() const override {
+    /*virtual void debug_print() const override {
         printf("[new_code](lang = %s)\n", lang.c_str());
     }
 
     const std::vector<node*>* child_nodes() const override {
         return nullptr;
-    }
+    }*/
 
     bool verbatim() const override {
         return true;
     }
 
-    void add_node(node*) override {}
+    //void add_node(node*) override {}
 
 
     std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {

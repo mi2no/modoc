@@ -136,7 +136,7 @@ modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unod
     return result;
 }
 
-void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
+/*void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
         for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
             if (!*itr) fputs("\u2502  ", stdout);
             else fputs("   ", stdout);
@@ -162,7 +162,7 @@ void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is
             }
             branch_end.pop_back();
         }
-    }
+    }*/
 
 std::string modoc::tree::node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
     std::string result = "\033[2m";
