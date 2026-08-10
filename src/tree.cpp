@@ -84,6 +84,9 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             for (node* child : initialized.nodes) n->add_node(child);
             initialized.nodes.clear();
 
+            //modoc::tree* n_subtree = n->subtree();
+            //if (n_subtree != nullptr) n_subtree->combine(std::move(initialized)); 
+
             //printf("Initialized primitive [%s]\n", n->type());
             //fflush(stdout);
 
@@ -210,4 +213,9 @@ void modoc::tree::destroy_node(node* n) {
             destroy_node(ch);
 
     delete n;
+}
+
+void modoc::tree::clear() {
+    for (node* n : nodes) delete n;
+    nodes.clear();
 }

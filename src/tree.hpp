@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cstring>
 #include <iterator>
 #include <string>
 #include <string_view>
@@ -242,6 +244,16 @@ namespace modoc {
             else return nullptr;
         }
 
+        void combine(modoc::tree&& tree) {
+            const size_t prev_size = nodes.size();
+            nodes.resize(prev_size + tree.nodes.size());
+            memcpy(nodes.data() + prev_size, tree.nodes.data(), sizeof(node*) * tree.nodes.size());
+
+            /*for (auto& entry : tree.variables) {
+                _assign_at(entry.first, std::move(entry.second), prev_size + )
+            }*/
+        }
+
         /*void print() const {
             puts("\u25CF");
             std::list<bool> branch_end;
@@ -291,16 +303,20 @@ namespace modoc {
         void destroy_node(node* n);
 
         void destroy_tree(std::vector<node*>& tree) {
-            for (node* n : tree)
+            for (node* n : tree) {
                 destroy_node(n);
+            }
             tree.clear();
         }
 
+        void clear();
+
         ~tree() {
-            //print();
-            fflush(stdout);
-            destroy_tree(nodes);
+            clear();
+            ++destroy_count;
         }
+
+        inline static uint16_t destroy_count = 0;
     };
    
 }

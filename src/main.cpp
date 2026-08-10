@@ -232,5 +232,7 @@ int main(int argc, char** argv) {
         delete ent.second;
     }
 
+    log.log("modoc", "tree", std::string("Destroyed subtrees: ") + std::to_string(modoc::tree::destroy_count));
+
     return 0;
 }

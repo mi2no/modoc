@@ -36,6 +36,8 @@ struct node {
     virtual const std::vector<node*>* child_nodes() const = 0; // TODO: remove
     virtual void add_node(node*) = 0; // remove?
 
+    virtual modoc::tree* subtree() = 0;
+
     virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
     virtual void parse_verbatim(std::string_view str) {}
 
@@ -90,6 +92,10 @@ struct special_node : node {
         return nullptr;
     }
 
+    modoc::tree* subtree() override final {
+        return nullptr;
+    }
+
     void add_node(node*) override final {};
 
     bool is_primitive() const override final {
@@ -135,6 +141,10 @@ struct text_node : node {
         return nullptr;
     }
 
+    modoc::tree* subtree() override {
+        return nullptr;
+    }
+
     void add_node(node*) override {}
 };
 
@@ -147,9 +157,10 @@ static bool debug_str_match(const char* a, const char* b) {
 struct group_node : node {
     inline static uint32_t t_id;
     
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
     // replace with:
     // modoc::tree subtree;
+    modoc::tree _subtree;
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -165,16 +176,22 @@ struct group_node : node {
 
 
     const std::vector<node*>* child_nodes() const override {
-        return &nodes;
+        //return &nodes;
+        return &_subtree.nodes;
+    }
+
+    modoc::tree* subtree() override final {
+        return &_subtree;
     }
 
     void parse_tokens(std::vector<modoc::string_type>&&, uint8_t) override {}
 
     void add_node(node* n) override {
-        nodes.push_back(n);
+        //nodes.push_back(n);
+        _subtree.nodes.push_back(n);
     }
 
-    ~group_node() override = default;
+    virtual ~group_node() override = default;
 };
 
 struct group_f : node_factory {
@@ -194,7 +211,7 @@ struct group_f : node_factory {
     }
 };
 
-struct sec_node :  public group_node {
+struct sec_node : public group_node {
     inline static uint32_t t_id;
     //inline static std::vector<uint8_t> sec_id;
 
@@ -248,10 +265,10 @@ struct sec_node :  public group_node {
                 title += new_tokens[i].view();
             }
         }
-        else if (nodes.size() && debug_str_match(nodes.back()->type(), "text"))
-            nodes.back()->parse_tokens(std::move(new_tokens), tabs);
+        else if (_subtree.nodes.size() && debug_str_match(_subtree.nodes.back()->type(), "text"))
+            _subtree.nodes.back()->parse_tokens(std::move(new_tokens), tabs);
         else
-            nodes.push_back(new text_node(std::move(new_tokens)));
+            _subtree.nodes.push_back(new text_node(std::move(new_tokens)));
     }
 
     /*void add_node(node* n) override {
@@ -363,10 +380,10 @@ struct serializer<sec_node> {
     >;
 };
 
-struct list_node : node {
+struct list_node : public group_node {
     inline static uint32_t t_id;
 
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -382,28 +399,30 @@ struct list_node : node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return &nodes;
-    }
+    }*/
 
     void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         std::string_view first = new_tokens[0].view();
-        if (nodes.empty() && first[0] != '-') nodes.push_back(new text_node(std::move(new_tokens)));
+        if (_subtree.nodes.empty() && first[0] != '-') _subtree.nodes.push_back(new text_node(std::move(new_tokens)));
         else if (first[0] == '-') {
             if (first.size() > 1) {
                 text_node* t = new text_node(std::move(new_tokens));
                 first = t->tokens[0].view();
                 t->tokens[0] = {{first.data() + 1, first.length() - 1}, false};
-                nodes.push_back(t);
+                _subtree.nodes.push_back(t);
             }
-            else nodes.push_back(new text_node(std::move(new_tokens), 1));
+            else _subtree.nodes.push_back(new text_node(std::move(new_tokens), 1));
         }
-        else nodes.back()->parse_tokens(std::move(new_tokens), tabs);
+        else _subtree.nodes.back()->parse_tokens(std::move(new_tokens), tabs);
     }
 
-    void add_node(node* n) override {
+    /*void add_node(node* n) override {
         nodes.push_back(n);
-    }
+    }*/
+
+    ~list_node() override = default;
 };
 
 struct list_f : node_factory {
@@ -475,6 +494,10 @@ struct code_node : node {
     }*/
 
     const std::vector<node*>* child_nodes() const override {
+        return nullptr;
+    }
+
+    modoc::tree* subtree() override {
         return nullptr;
     }
 
