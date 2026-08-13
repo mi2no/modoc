@@ -9,7 +9,6 @@
 #include <vector>
 #include <list>
 #include <cstdint>
-#include <stack>
 
 #include "string_type.hpp"
 #include "value.hpp"
@@ -187,13 +186,15 @@ namespace modoc {
         };
 
         std::vector<node*> nodes;
-        std::map</*modoc::string_type*/std::string, std::stack<layered_var>> variables;
+        std::map</*modoc::string_type*/std::string, std::vector<layered_var>> variables;
         //uint32_t ind = 0;
+
+        modoc::tree* parent_tree = nullptr;
 
     private:
 
-        static std::vector<node*> initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text = false); 
-        static tree initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0, const bool copy_text = false);
+        static tree initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text = false); 
+        static tree initialize(tree* parent, std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0, const bool copy_text = false);
 
         //void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
         std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
@@ -205,12 +206,12 @@ namespace modoc {
             //printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
             if (variables.contains(name)) {
                 auto& stack = variables.at(name);
-                if (stack.top().begin_ind == ind) stack.top().v/*alue*/ = std::move(v);
-                else stack.push({std::move(v), ind});
+                if (stack.back().begin_ind == ind) stack.back().v/*alue*/ = std::move(v);
+                else stack.push_back({std::move(v), ind});
             }
             else {
                 auto& stack = variables[name] = {};
-                variables[name].push({std::move(v), ind});
+                variables[name].push_back({std::move(v), ind});
             }
             //printf("Variables: %zu\n", variables.size());
         }
@@ -230,7 +231,7 @@ namespace modoc {
         }
 
         static tree initialize(uninitialized_tree u_tree) {
-            return initialize(u_tree.nodes, 0);
+            return initialize(nullptr, u_tree.nodes, 0);
         }
 
         void assign(std::string_view name, value&& v) {
@@ -240,19 +241,13 @@ namespace modoc {
         const value* get_variable(std::string_view _name) const {
             std::string name = std::string(_name);
             
-            if (variables.contains(name)) return &variables.at(name).top().v;
+            if (variables.contains(name)) return &variables.at(name).back().v;
+            if (parent_tree != nullptr) return parent_tree->get_variable(_name);
             else return nullptr;
         }
 
-        void combine(modoc::tree&& tree) {
-            const size_t prev_size = nodes.size();
-            nodes.resize(prev_size + tree.nodes.size());
-            memcpy(nodes.data() + prev_size, tree.nodes.data(), sizeof(node*) * tree.nodes.size());
-
-            /*for (auto& entry : tree.variables) {
-                _assign_at(entry.first, std::move(entry.second), prev_size + )
-            }*/
-        }
+        void combine(modoc::tree&& tree); 
+        void insert_node(node* n);
 
         /*void print() const {
             puts("\u25CF");

@@ -19,10 +19,12 @@ void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const 
     } 
 }
 
-std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text) {
+modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text) {
+    modoc::tree result;
+    const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
+
     if (un.is_node()) {
         uninitialized_tree::unode::node_type& nt = un.node();
-        const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
         options_t map;
 
         {
@@ -79,13 +81,16 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
         }
 
         if (n->is_primitive()) {
-            modoc::tree initialized = std::move(initialize(nt.children, depth + 1, copy_text));
+            modoc::tree initialized = std::move(initialize(&tree, nt.children, depth + 1, copy_text));
             
-            for (node* child : initialized.nodes) n->add_node(child);
-            initialized.nodes.clear();
+            /*for (node* child : initialized.nodes) n->add_node(child);
+            initialized.nodes.clear();*/
 
-            //modoc::tree* n_subtree = n->subtree();
-            //if (n_subtree != nullptr) n_subtree->combine(std::move(initialized)); 
+            modoc::tree* n_subtree = n->subtree();
+            if (n_subtree != nullptr) {
+                n_subtree->combine(std::move(initialized));
+                initialized.clear();
+            }
 
             //printf("Initialized primitive [%s]\n", n->type());
             //fflush(stdout);
@@ -97,7 +102,8 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
             }*/
 
 
-            return {n};
+            //return {n};
+            result.insert_node(n);
         }
         else {
             std::vector<uninitialized_tree::unode> expanded = ((special_node*)n)->expand(tree);
@@ -107,8 +113,8 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
 
             paste_children(expanded, nt.children);
             
-            modoc::tree initialized = std::move(modoc::tree::initialize(expanded, depth, true));
-            std::vector<node*> result = std::move(initialized.nodes);
+            modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true));
+            /*std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 
             const uint32_t off = tree.nodes.size();
@@ -121,22 +127,63 @@ std::vector<node*> modoc::tree::initialize_node(tree& tree, uninitialized_tree::
                 }
             }
 
-            return result;
+            return result;*/
+            result.combine(std::move(initialized));
         }
     }
-    else return {new text_node(tokenize(un.text().view(), nullptr, copy_text))}; // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
+    else result.insert_node(new text_node(tokenize(un.text().view(), get_var_func, copy_text))); // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
+    
+    return result;
 }
 
-modoc::tree modoc::tree::initialize(std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth, const bool copy_text) {
+modoc::tree modoc::tree::initialize(modoc::tree* parent, std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth, const bool copy_text) {
     tree result;
+    result.parent_tree = parent;
 
     for (uninitialized_tree::unode& un : unodes) {
-        std::vector<node*> initialized = initialize_node(result, un, depth, copy_text);
+        /*std::vector<node*> initialized = initialize_node(result, un, depth, copy_text);
         std::move(initialized.begin(), initialized.end(), std::back_inserter(result.nodes));
-        initialized.clear();
+        initialized.clear();*/
+        modoc::tree subtree = initialize_node(result, un, depth, copy_text);
+        result.combine(std::move(subtree));
+        subtree.nodes.clear(); //?
     }
 
     return result;
+}
+
+void modoc::tree::combine(modoc::tree&& tree) {
+    const size_t prev_size = nodes.size();
+    
+    /*nodes.resize(prev_size + tree.nodes.size());
+    memcpy(nodes.data() + prev_size, tree.nodes.data(), sizeof(node*) * tree.nodes.size());*/
+
+    for (node* n : tree.nodes) {
+        modoc::tree* subtree = n->subtree(); 
+        if (subtree != nullptr) subtree->parent_tree = this;
+    }
+
+    std::move(tree.nodes.begin(), tree.nodes.end(), std::back_inserter(nodes));
+    tree.nodes.clear();
+
+    for (auto& entry : tree.variables) {
+        for (modoc::tree::layered_var& lv : entry.second)
+            _assign_at(entry.first, std::move(lv.v), prev_size + lv.begin_ind);
+        entry.second.clear();
+    }
+}
+
+void modoc::tree::insert_node(node* n) {
+    nodes.push_back(n);
+
+    modoc::tree* subtree = n->subtree();
+    if (subtree != nullptr) {
+        subtree->parent_tree = this;
+        for (auto& entry : subtree->variables) {
+            value v = entry.second.back().v;
+            /*subtree->*/assign(entry.first, std::move(v));
+        } 
+    }
 }
 
 /*void modoc::tree::print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest) const {
