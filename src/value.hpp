@@ -1,5 +1,6 @@
 #pragma once
 
+#include <charconv>
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
@@ -267,7 +268,7 @@ struct value {
         return _parse(str, get_variable); 
     }
 
-    static value parse(std::string_view view, std::function<const value*(std::string_view)> get_variable = nullptr) { //TODO: make this range-safe
+    static value parse(std::string_view view, const char** last = nullptr, std::function<const value*(std::string_view)> get_variable = nullptr) { //TODO: make this range-safe
         value result;
         const char *str = view.data(), * const end = view.end();
 
@@ -304,57 +305,47 @@ struct value {
             ++str;
         }
         else {
-            char* end = (char*)str + 4; // TODO: range
+            //char* end = (char*)str + 4; // TODO: range
+            const char* c = str + 4;
             
-            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
+            if (end - str >= 4 && strncmp(str, "true", 4) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = true;
                 str = end;
                 return result;
             }
 
-            ++end;
-            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
+            ++c;
+            if (end - str >= 5 && strncmp(str, "false", 5) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = false;
                 str = end;
                 return result;
             }
             
-            const double num = strtod(str, &end);
+            /*const double num = strtod(str, &end);
             if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
                 result.type = NUMBER;
                 result.data.number = num;
                 str = end;
                 return result;
-            }
+            }*/
             
-            /*double num;
-            const auto [end, ec] = std::from_chars(
-                str,
-                str + length,  // or whatever the end of your valid range is
-                num
-            );
+            double num;
+            const auto [read_end, ec] = std::from_chars(str, end, num);
 
-            if (str != end &&
-                ec == std::errc{} &&
-                (end == str + length ||
-                 *end == ']' || *end == ' ' || *end == ',' ||
-                 *end == '}' || *end == '\n'))
-            {
+            if (str != read_end && ec == std::errc{} && (read_end == end || *read_end == ']' || *read_end == ' ' || *read_end == ',' || *read_end == '}' || *read_end == '\n')) {
                 result.type = NUMBER;
                 result.data.number = num;
                 str = end;
                 return result;
-            }*/
+            }
 
-            end = (char*)str;
-            while (*end > ' ' && *end != ',' && *end != ']' && *end != '}') ++end; // TODO: discard terminating chars like ']' & '}' - focus on ranage instead
+            c = str;
+            while (c != end && *c > ' ' && *c != ',' && *c != ']' && *c != '}') ++c; // TODO: discard terminating chars like ']' & '}' - focus on ranage instead
             //printf("const: [%.*s]\n", (int)(end - str), str);
 
-            std::string_view name = {str, end};
-            str = end;
-
+            std::string_view name = {str, c};
             const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
             if (v != nullptr) {
                 result = *v;
@@ -461,6 +452,7 @@ static void parse_options(std::string_view view, options_t& ops, std::function<c
         }
         else if (*ptr > ' ' && *ptr != '=') {
             ops[option] = value::_parse(ptr, get_variable);
+            //ops[option] = value::parse({ptr, view.end()}, get_variable);
             is_value = false;
         }
     }
