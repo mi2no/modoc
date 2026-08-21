@@ -13,8 +13,11 @@ void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const 
         if (un.is_node() && un.node().children.size()) paste_children(un.node().children, children);
         else if (un.is_insert()) {
             itr = utree.erase(itr);
-            itr = utree.insert(itr, children.begin(), children.end());
-            itr += children.size() - 1;
+            if (children.size()) {
+                itr = utree.insert(itr, children.begin(), children.end());
+                itr += children.size() - 1;
+            }
+            itr -= 1;
         }
     } 
 }
@@ -65,7 +68,7 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
                     end = view.end(); 
             }
 
-            if (n->verbatim()) n->parse_verbatim({view.begin(), end});
+            if (n->verbatim()) n->parse_verbatim({view.begin(), end}, copy_text);
             else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
 
             while (end < view.end() && (*end == ' ' || *end == '\n' || *end == '\t')) ++end; // Skip invalid chars
@@ -81,15 +84,17 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
         }
 
         if (n->is_primitive()) {
-            modoc::tree initialized = std::move(initialize(&tree, nt.children, depth + 1, copy_text));
-            
-            /*for (node* child : initialized.nodes) n->add_node(child);
-            initialized.nodes.clear();*/
+            if (nt.children.size()) {
+                modoc::tree initialized = std::move(initialize(&tree, nt.children, depth + 1, copy_text));
+                
+                /*for (node* child : initialized.nodes) n->add_node(child);
+                initialized.nodes.clear();*/
 
-            modoc::tree* n_subtree = n->subtree();
-            if (n_subtree != nullptr) {
-                n_subtree->combine(std::move(initialized));
-                initialized.clear();
+                modoc::tree* n_subtree = n->subtree();
+                if (n_subtree != nullptr) {
+                    n_subtree->combine(std::move(initialized));
+                    initialized.clear();
+                }
             }
 
             //printf("Initialized primitive [%s]\n", n->type());
@@ -111,9 +116,16 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
             //fflush(stdout);
             delete n;
 
+            modoc::logger log;
+
             paste_children(expanded, nt.children);
             
+            log.log("modoc", "expand-children", std::to_string(nt.children.size()));
+            log.log("modoc", "paste", modoc::uninitialized_tree::to_string(expanded));
+            
             modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true));
+            
+            log.log("modoc", "expand", initialized.to_string());
             /*std::vector<node*> result = std::move(initialized.nodes);
             initialized.nodes.clear();
 
@@ -167,8 +179,10 @@ void modoc::tree::combine(modoc::tree&& tree) {
     tree.nodes.clear();
 
     for (auto& entry : tree.variables) {
-        for (modoc::tree::layered_var& lv : entry.second)
-            _assign_at(entry.first, std::move(lv.v), prev_size + lv.begin_ind);
+        for (modoc::tree::layered_var& lv : entry.second) {
+            printf("%s = %s [%hhu]\n", entry.first.c_str(), lv.v.to_string().c_str(), lv.overwrite);
+            _assign_at(entry.first, std::move(lv.v), lv.overwrite, prev_size + lv.begin_ind);
+        }
         entry.second.clear();
     }
 }
@@ -180,8 +194,17 @@ void modoc::tree::insert_node(node* n) {
     if (subtree != nullptr) {
         subtree->parent_tree = this;
         for (auto& entry : subtree->variables) {
-            value v = entry.second.back().v;
-            /*subtree->*/assign(entry.first, std::move(v));
+            layered_var* lv = nullptr;
+            
+            size_t i = entry.second.size();
+            while (i--)
+                if (entry.second[i].overwrite) {
+                    lv = &entry.second[i];
+                    printf("%s = %s\n", entry.first.c_str(), lv->v.to_string().c_str());
+                    break;
+                }                
+
+            if (lv != nullptr) assign(entry.first, std::move(lv->v), true);
         } 
     }
 }

@@ -39,7 +39,13 @@ struct node {
     virtual modoc::tree* subtree() = 0;
 
     virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
-    virtual void parse_verbatim(std::string_view str) {}
+
+    /**
+     * Used to parse inner content "as is". With no tokenization or expression evaluation.
+     *
+     * @param to_copy Determines whether the contents of str will be deleted after the function is executed and should be copied. It could mean that the source file is the main one (which will be unmapped from memmory after the backend is run) or an inlined one (opened by something like @gen).
+     * */
+    virtual void parse_verbatim(std::string_view str, bool to_copy) {}
 
     virtual void add_meta(const options_t& meta) {
         for (const auto& entry : meta)

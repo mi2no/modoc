@@ -183,6 +183,7 @@ namespace modoc {
         struct layered_var {
             value v;//value;
             uint32_t begin_ind;
+            bool overwrite;
         };
 
         std::vector<node*> nodes;
@@ -200,20 +201,29 @@ namespace modoc {
         std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
 
 
-        void _assign_at(std::string_view _name, value&& v, uint32_t ind) {
+        void _assign_at(std::string_view _name, value&& v, bool overwrite, uint32_t ind) {
             std::string name = std::string(_name);
+
+            puts("\033[1mBefore\033[0m");
+            puts(to_string().c_str()); 
             
             //printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
             if (variables.contains(name)) {
                 auto& stack = variables.at(name);
-                if (stack.back().begin_ind == ind) stack.back().v/*alue*/ = std::move(v);
-                else stack.push_back({std::move(v), ind});
+                /*if (stack.back().begin_ind == ind) {
+                    stack.back().v = std::move(v);
+                    stack.back().overwrite = overwrite;
+                }
+                else*/ stack.emplace_back(std::move(v), ind, overwrite);
             }
             else {
                 auto& stack = variables[name] = {};
-                variables[name].push_back({std::move(v), ind});
+                variables[name].push_back({std::move(v), ind, overwrite});
             }
             //printf("Variables: %zu\n", variables.size());
+
+            puts("\033[1mAfter\033[0m");
+            puts(to_string().c_str()); 
         }
 
 
@@ -234,8 +244,8 @@ namespace modoc {
             return initialize(nullptr, u_tree.nodes, 0);
         }
 
-        void assign(std::string_view name, value&& v) {
-            _assign_at(name, std::move(v), nodes.size());
+        void assign(std::string_view name, value&& v, bool overwrite = false) {
+            _assign_at(name, std::move(v), overwrite, nodes.size());
         }
 
         const value* get_variable(std::string_view _name) const {
@@ -281,16 +291,20 @@ namespace modoc {
                 result += node_to_str(nodes[i], branch_end, false);
             }
 
-            /*printf("Variables: %zu\n", variables.size());
+            //printf("Variables: %zu\n", variables.size());
             for (const auto& entry : variables) {
                 auto stack = entry.second;
-                printf("$%s:\n", entry.first.c_str());
+                result += entry.first;
+                result += '\n';
                 
-                while (stack.size()) {
-                    printf("\t%u : %s\n", stack.top().begin_ind, stack.top().v.to_string().c_str());
-                    stack.pop();
+                for (const layered_var& lv : entry.second) {
+                    result += '\t';
+                    result += std::to_string(lv.begin_ind);
+                    result += ' ';
+                    result += lv.v.to_string();
+                    result += '\n';
                 }
-            }*/
+            }
 
             return result;
         }

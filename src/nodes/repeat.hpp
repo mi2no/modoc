@@ -3,6 +3,7 @@
 #include "../node.hpp"
 #include "../tree.hpp"
 #include "../value.hpp"
+#include "../log.hpp"
 
 struct repeat_node : special_node {
     inline static uint32_t t_id;
@@ -18,7 +19,7 @@ struct repeat_node : special_node {
     }
 
     uint8_t scope_end() override {
-        return scope_end::ENDSCP;
+        return scope_end::START;
     }
 
 
@@ -57,12 +58,25 @@ struct repeat_node : special_node {
         std::vector<modoc::uninitialized_tree::unode> result;
         result.reserve((size_t)(to - from) * 2);
 
+        modoc::logger log;
+        log.log("@repeat", "expand", std::string("from = ") + std::to_string(from) + "; to = " + std::to_string(to));
+
         for (double i = from; i < to; ++i) {
-            result.push_back({{"assign", false}, {"", false}, {"overwrite = true", false}, {"i = 1", false}});
+            modoc::uninitialized_tree::unode u_assign = {{"assign", false}, {"", false}, {"overwrite = true", false}, {"", false}};
+            u_assign.node().children.emplace_back(std::move(modoc::string_type("i = 1", false)));
+            
+            result.push_back(std::move(u_assign));
             result.push_back({true});
         }
 
         //modoc::apply_meta(result, meta);
+        
+        modoc::uninitialized_tree ut;
+        ut.nodes = std::move(result);
+        log.log("@repeat", "expand", ut.to_string());
+
+        result = std::move(ut.nodes);
+        ut.nodes.clear();
 
         return result;
     }

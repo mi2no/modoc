@@ -295,7 +295,7 @@ namespace modoc {
             }
         }
 
-        std::string node_to_str(const unode& n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const {
+        static std::string node_to_str(const unode& n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) {
             std::string result = "\033[2m";
 
             for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
@@ -334,7 +334,7 @@ namespace modoc {
             return result;
         }
 
-        std::string to_string() const {
+        static std::string to_string(const std::vector<unode>& nodes) {
             std::string result = "\u25CF\n";
             std::list<bool> branch_end;
             branch_end.push_back(false);
@@ -356,6 +356,10 @@ namespace modoc {
             }*/
 
             return result;
+        }
+
+        std::string to_string() const {
+            return to_string(nodes);
         }
 
     };

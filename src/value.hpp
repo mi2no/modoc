@@ -81,6 +81,7 @@ struct value {
         data = v.data;
 
         v.type = NONE;
+        if (type == STRING) puts("str moved!");
     }
 
     value& operator=(const value& v) {
@@ -105,6 +106,7 @@ struct value {
 
         v.type = NONE;
 
+        if (type == STRING) puts("str moved!");
         return *this;
     }
 
@@ -222,6 +224,26 @@ struct value {
                 str = end;
                 return result;
             }
+            /*
+             double num;
+            const auto [end, ec] = std::from_chars(
+                str,
+                str + length,  // or whatever the end of your valid range is
+                num
+            );
+
+            if (str != end &&
+                ec == std::errc{} &&
+                (end == str + length ||
+                 *end == ']' || *end == ' ' || *end == ',' ||
+                 *end == '}' || *end == '\n'))
+            {
+                result.type = NUMBER;
+                result.data.number = num;
+                str = end;
+                return result;
+            }
+            */
 
             end = (char*)str;
             while (*end > ' ' && *end != ',' && *end != ']' && *end != '}') ++end;
@@ -244,6 +266,106 @@ struct value {
     static value parse(const char* str, std::function<const value*(std::string_view)> get_variable = nullptr) {
         return _parse(str, get_variable); 
     }
+
+    static value parse(std::string_view view, std::function<const value*(std::string_view)> get_variable = nullptr) { //TODO: make this range-safe
+        value result;
+        const char *str = view.data(), * const end = view.end();
+
+        while (str != end && (*str == ' ' || *str == '\n')) ++str;
+
+        if (str == end) return result;
+
+        if (str[0] == '"') {
+            result.type = STRING;
+            result.parse_string(str, &str);
+            ++str;
+        }
+        else if (str[0] == '[') {
+            result.type = LIST;
+            list_data& list = result.data.list = {nullptr, 1};
+            
+            {
+                const char* ptr = str;
+                while (*++ptr != ']')
+                    if (*ptr == ',') ++list.size;
+
+                list.ptr = new value[list.size];
+            }
+
+            size_t init = 0;
+            ++str;
+            while (*str != ']') {
+                list.ptr[init] = _parse(str, get_variable);
+                if (list.ptr[init].type != NONE) ++init;
+                
+                while (*str != ',' && *str != ']') ++str;
+                if (*str == ',') ++str;
+            }
+            ++str;
+        }
+        else {
+            char* end = (char*)str + 4; // TODO: range
+            
+            if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
+                result.type = BOOLEAN;
+                result.data.boolean = true;
+                str = end;
+                return result;
+            }
+
+            ++end;
+            if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
+                result.type = BOOLEAN;
+                result.data.boolean = false;
+                str = end;
+                return result;
+            }
+            
+            const double num = strtod(str, &end);
+            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
+                result.type = NUMBER;
+                result.data.number = num;
+                str = end;
+                return result;
+            }
+            
+            /*double num;
+            const auto [end, ec] = std::from_chars(
+                str,
+                str + length,  // or whatever the end of your valid range is
+                num
+            );
+
+            if (str != end &&
+                ec == std::errc{} &&
+                (end == str + length ||
+                 *end == ']' || *end == ' ' || *end == ',' ||
+                 *end == '}' || *end == '\n'))
+            {
+                result.type = NUMBER;
+                result.data.number = num;
+                str = end;
+                return result;
+            }*/
+
+            end = (char*)str;
+            while (*end > ' ' && *end != ',' && *end != ']' && *end != '}') ++end; // TODO: discard terminating chars like ']' & '}' - focus on ranage instead
+            //printf("const: [%.*s]\n", (int)(end - str), str);
+
+            std::string_view name = {str, end};
+            str = end;
+
+            const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
+            if (v != nullptr) {
+                result = *v;
+            }
+            else if (constants.contains(name))
+                result = constants.at(name);
+        }
+
+        return result;
+    }
+
 
     bool boolean() const {
         return data.boolean;
@@ -269,7 +391,7 @@ struct value {
             case value::NUMBER:
                 return std::to_string(number());
             case value::STRING:
-                return /*'"'*/std::string{string()} /*'"'*/;
+                return /*'"'*/std::string{string()}/*'"'*/;
             case value::LIST:
                 {
                     std::string result = "[";
