@@ -268,13 +268,16 @@ struct value {
         return _parse(str, get_variable); 
     }
 
-    static value parse(std::string_view view, const char** last = nullptr, std::function<const value*(std::string_view)> get_variable = nullptr) { //TODO: make this range-safe
+    static value parse(std::string_view view, const char** read_end = nullptr, std::function<const value*(std::string_view)> get_variable = nullptr) { //TODO: make this range-safe
         value result;
         const char *str = view.data(), * const end = view.end();
 
         while (str != end && (*str == ' ' || *str == '\n')) ++str;
 
-        if (str == end) return result;
+        if (str == end) {
+            *read_end = str;
+            return result;
+        }
 
         if (str[0] == '"') {
             result.type = STRING;
@@ -296,7 +299,7 @@ struct value {
             size_t init = 0;
             ++str;
             while (*str != ']') {
-                list.ptr[init] = _parse(str, get_variable);
+                list.ptr[init] = parse({str, end}, &str, get_variable);
                 if (list.ptr[init].type != NONE) ++init;
                 
                 while (*str != ',' && *str != ']') ++str;
@@ -311,7 +314,7 @@ struct value {
             if (end - str >= 4 && strncmp(str, "true", 4) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = true;
-                str = end;
+                *read_end = c;
                 return result;
             }
 
@@ -319,26 +322,20 @@ struct value {
             if (end - str >= 5 && strncmp(str, "false", 5) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
                 result.type = BOOLEAN;
                 result.data.boolean = false;
-                str = end;
+                *read_end = c;
                 return result;
             }
-            
-            /*const double num = strtod(str, &end);
-            if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
-                result.type = NUMBER;
-                result.data.number = num;
-                str = end;
-                return result;
-            }*/
-            
-            double num;
-            const auto [read_end, ec] = std::from_chars(str, end, num);
+           
+            { // Number
+                double num;
+                const auto [f_end, ec] = std::from_chars(str, end, num);
 
-            if (str != read_end && ec == std::errc{} && (read_end == end || *read_end == ']' || *read_end == ' ' || *read_end == ',' || *read_end == '}' || *read_end == '\n')) {
-                result.type = NUMBER;
-                result.data.number = num;
-                str = end;
-                return result;
+                if (str != f_end && ec == std::errc{} && (f_end == end || *f_end == ']' || *f_end <= ' ' || *f_end == ',' || *f_end == '}')) {
+                    result.type = NUMBER;
+                    result.data.number = num;
+                    *read_end = f_end;
+                    return result;
+                }
             }
 
             c = str;
@@ -354,6 +351,7 @@ struct value {
                 result = constants.at(name);
         }
 
+        *read_end = str;
         return result;
     }
 
@@ -451,8 +449,8 @@ static void parse_options(std::string_view view, options_t& ops, std::function<c
             }
         }
         else if (*ptr > ' ' && *ptr != '=') {
-            ops[option] = value::_parse(ptr, get_variable);
-            //ops[option] = value::parse({ptr, view.end()}, get_variable);
+            //ops[option] = value::_parse(ptr, get_variable);
+            ops[option] = value::parse({ptr, view.end()}, &ptr, get_variable);
             is_value = false;
         }
     }
