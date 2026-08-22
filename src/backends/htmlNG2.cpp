@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../node.hpp"
+#include "../log.hpp"
 
 std::unordered_set<std::string> dependencies;
 
@@ -140,7 +141,6 @@ std::string node_to_str(const node* n) {
 
 extern "C" void compile(const std::vector<node*>& tree) {
     FILE* const out = fopen("out.html", "w");
-
     std::string result;
 
     result += "<!DOCTYPE HTML>\n<html>";
@@ -253,9 +253,8 @@ extern "C" void compile(const std::vector<node*>& tree) {
     }\n\
     </style>";
 
-    for (const node* n : tree) {
-        result += node_to_str(n);
-    }
+    for (const node* n : tree)
+       result += node_to_str(n);
 
     result += "</html>";
 

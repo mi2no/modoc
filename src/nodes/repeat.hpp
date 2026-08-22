@@ -3,9 +3,10 @@
 #include "../node.hpp"
 #include "../tree.hpp"
 #include "../value.hpp"
+#include "../log.hpp"
 
 struct repeat_node : special_node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     uint8_t depth;
     double from, to;
@@ -18,7 +19,7 @@ struct repeat_node : special_node {
     }
 
     uint8_t scope_end() override {
-        return scope_end::ENDSCP;
+        return scope_end::START;
     }
 
 
@@ -27,11 +28,11 @@ struct repeat_node : special_node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
 
-    void add_node(node*) override {}
+    void add_node(node*) override {}*/
 
     void parse_tokens(std::vector<modoc::string_type>&& tokens, uint8_t depth) override {
         while (depth--) modoc += '\t';
@@ -42,28 +43,40 @@ struct repeat_node : special_node {
         modoc += '\n';
     }
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         //printf("[%s](cmd = %s)\n", type(), command.c_str());
         printf("[repeat] %s\n", modoc.c_str());
-    }
+    }*/
 
     bool verbatim() const override {
         return true;
     }
 
-    std::vector<node*> expand(const std::vector<node*>&) const override {
-        std::vector<node*> result;
+
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
+    //std::vector<node*> expand(const std::vector<node*>&) const override {
+        std::vector<modoc::uninitialized_tree::unode> result;
+        result.reserve((size_t)(to - from) * 2);
+
+        modoc::logger log;
+        log.log("@repeat", "expand", std::string("from = ") + std::to_string(from) + "; to = " + std::to_string(to));
 
         for (double i = from; i < to; ++i) {
-            variables["i"] = value(i);
-            std::vector<node*> itr_tree = modoc::create_tree(modoc.c_str(), depth);
-
-            result.reserve(result.size() + itr_tree.size());
-            std::move(itr_tree.begin(), itr_tree.end(), std::back_inserter(result));
+            modoc::uninitialized_tree::unode u_assign = {{"assign", false}, {"", false}, {"overwrite = true", false}, {"", false}};
+            u_assign.node().children.emplace_back(std::move(modoc::string_type("i = 1", false)));
+            
+            result.push_back(std::move(u_assign));
+            result.push_back({true});
         }
-        variables.erase("i");
 
-        modoc::apply_meta(result, meta);
+        //modoc::apply_meta(result, meta);
+        
+        modoc::uninitialized_tree ut;
+        ut.nodes = std::move(result);
+        log.log("@repeat", "expand", ut.to_string());
+
+        result = std::move(ut.nodes);
+        ut.nodes.clear();
 
         return result;
     }
@@ -85,5 +98,3 @@ struct repeat_f : node_factory {
         repeat_node::t_id = id;
     }
 };
-
-uint32_t repeat_node::t_id = 0;

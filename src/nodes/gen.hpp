@@ -9,11 +9,12 @@
 
 #include "../node.hpp"
 #include "../tree.hpp"
+#include "../log.hpp"
 
 #include "../../../serialize/serialize.hpp"
 
 struct gen_node : special_node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
     
     uint8_t depth;
     std::string command;
@@ -41,17 +42,17 @@ struct gen_node : special_node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
 
-    void add_node(node*) override {}
+    void add_node(node*) override {}*/
 
     void parse_tokens(std::vector<modoc::string_type>&&, uint8_t) override {}
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         printf("[%s](cmd = %s)\n", type(), command.c_str());
-    }
+    }*/
 
 //private:
 
@@ -68,7 +69,8 @@ struct gen_node : special_node {
 
 public:
 
-    std::vector<node*> expand(const std::vector<node*>&) const override {
+    std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
+    //std::vector<node*> expand(const std::vector<node*>&) const override {
         char path[] = "tmp_modoc_outXXXXXX";
         int fd = mkstemp(path);
 
@@ -84,17 +86,25 @@ public:
 
         close(fd);
         unlink(path);
+                
+        modoc::logger log;
+        std::vector<modoc::uninitialized_tree::unode> v;
 
-        std::vector<node*> v;
         switch (mode) {
             case MODOC:
-                puts("[@gen] modoc:");
-                puts(out);
+                {
+                log.log("@gen", "modoc", out);
 
-                return modoc::create_tree(out, depth);
+                modoc::uninitialized_tree ut = modoc::uninitialized_tree::parse_document(out, true);
+                log.log("@gen", "uninit tree", ut.to_string());
+
+                v = std::move(ut.nodes);
+                ut.nodes.clear();
+                }
+                break;
             case JSON:
             {
-                puts("[@gen] json:");
+                /*puts("[@gen] json:");
                 json::pretty_print(out);
 
                 const char* ptr = out;
@@ -156,14 +166,15 @@ public:
                         }
                     }
                     else stack.push({top->infos[top->ind].children, 0, curr});
-                }
+                }*/
             }
         }
 
         delete[] out;
 
-        puts("Evaluated subtree:");
-        modoc::print_doc_tree(v);
+        //log.log("@gen", "evaluated subtree", )
+        //puts("Evaluated subtree:");
+        //modoc::print_doc_tree(v);
 
         return v;
     }
@@ -205,5 +216,3 @@ struct serializer<gen_node::node_info> {
         return info;
     }
 };
-
-uint32_t gen_node::t_id = 0;

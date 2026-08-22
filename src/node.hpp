@@ -10,6 +10,7 @@
 
 //#include "options.hpp"
 #include "string_type.hpp"
+#include "tree.hpp"
 #include "value.hpp"
 
 #include "../../serialize/serialize.hpp"
@@ -32,9 +33,19 @@ struct node {
         return T::t_id == n->type_id();
     }
 
-    virtual const std::vector<node*>* child_nodes() const = 0;
-    virtual void add_node(node*) = 0;
+    virtual const std::vector<node*>* child_nodes() const = 0; // TODO: remove
+    virtual void add_node(node*) = 0; // remove?
+
+    virtual modoc::tree* subtree() = 0;
+
     virtual void parse_tokens(std::vector<modoc::string_type>&&, uint8_t tabs) = 0;
+
+    /**
+     * Used to parse inner content "as is". With no tokenization or expression evaluation.
+     *
+     * @param to_copy Determines whether the contents of str will be deleted after the function is executed and should be copied. It could mean that the source file is the main one (which will be unmapped from memmory after the backend is run) or an inlined one (opened by something like @gen).
+     * */
+    virtual void parse_verbatim(std::string_view str, bool to_copy) {}
 
     virtual void add_meta(const options_t& meta) {
         for (const auto& entry : meta)
@@ -44,10 +55,16 @@ struct node {
         for (const std::)
     }*/
 
-    virtual void final_pass() {}
+    //virtual void final_pass() {} // TODO: remove
 
-    virtual void debug_print() const {
+    /*virtual void debug_print() const {
         printf("[%s]\n", type());
+    }*/ // TODO: remove
+    
+    virtual std::string to_string() const {
+        std::string result = "[";
+        result += type();
+        return result += ']';
     }
 
     virtual bool verbatim() const {
@@ -56,7 +73,7 @@ struct node {
 
     virtual bool is_primitive() const {
         return true;
-    }
+    } // TODO: rename to is_core?
     
     virtual ~node() = default;
 };
@@ -69,11 +86,23 @@ struct node_factory {
 };
 
 struct special_node : node {
-    virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
+    //virtual std::vector<node*> expand(const std::vector<node*>& subtree) const = 0;
+    virtual std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const = 0;
 
-    virtual bool in_second_pass() const {
+    /*virtual bool in_second_pass() const {
         return false;
+    }*/ // TODO: remove
+        //
+
+    std::vector<node*>* child_nodes() const override final {
+        return nullptr;
     }
+
+    modoc::tree* subtree() override final {
+        return nullptr;
+    }
+
+    void add_node(node*) override final {};
 
     bool is_primitive() const override final {
         return false;
@@ -81,7 +110,7 @@ struct special_node : node {
 };
 
 struct text_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     std::vector<modoc::string_type> tokens{};
 
@@ -114,8 +143,11 @@ struct text_node : node {
         for (modoc::string_type& s : new_tokens) tokens.push_back(std::move(s));
     }
 
-
     const std::vector<node*>* child_nodes() const override {
+        return nullptr;
+    }
+
+    modoc::tree* subtree() override {
         return nullptr;
     }
 
@@ -129,9 +161,12 @@ static bool debug_str_match(const char* a, const char* b) {
 }
 
 struct group_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
     
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
+    // replace with:
+    // modoc::tree subtree;
+    modoc::tree _subtree;
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -147,16 +182,22 @@ struct group_node : node {
 
 
     const std::vector<node*>* child_nodes() const override {
-        return &nodes;
+        //return &nodes;
+        return &_subtree.nodes;
+    }
+
+    modoc::tree* subtree() override final {
+        return &_subtree;
     }
 
     void parse_tokens(std::vector<modoc::string_type>&&, uint8_t) override {}
 
     void add_node(node* n) override {
-        nodes.push_back(n);
+        //nodes.push_back(n);
+        _subtree.nodes.push_back(n);
     }
 
-    ~group_node() override = default;
+    virtual ~group_node() override = default;
 };
 
 struct group_f : node_factory {
@@ -176,17 +217,26 @@ struct group_f : node_factory {
     }
 };
 
-struct sec_node : node {
-    static uint32_t t_id;
-    inline static std::vector<uint8_t> sec_id;
+struct sec_node : public group_node {
+    inline static uint32_t t_id;
+    //inline static std::vector<uint8_t> sec_id;
 
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
     std::string title;
 
     uint8_t* id = nullptr;
     uint8_t depth = 0;
 
-    /*sec_node(std::vector<uint8_t> id_v) {
+    sec_node(std::vector<uint8_t> id_v) {
+        depth = /*id_size =*/ id_v.size() - 1;
+        id = new uint8_t[depth + 1];//id_size];
+
+        for (uint8_t i = 0; i < id_v.size(); ++i)
+            id[i] = id_v[i];
+    }
+
+    /*sec_node() = default; // TODO: temp
+    void set_id(std::vector<uint8_t> id_v) { // TODO: temp
         id_size = id_v.size();
         id = new uint8_t[id_size];
 
@@ -194,16 +244,7 @@ struct sec_node : node {
             id[i] = id_v[i];
     }
 
-    sec_node() = default; // TODO: temp
-    void set_id(std::vector<uint8_t> id_v) { // TODO: temp
-        id_size = id_v.size();
-        id = new uint8_t[id_size];
-
-        for (uint8_t i = 0; i < id_size; ++i)
-            id[i] = id_v[i];
-    }*/
-
-    sec_node(uint8_t depth) : depth(depth) {}
+    sec_node(uint8_t depth) : depth(depth) {}*/
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -218,9 +259,9 @@ struct sec_node : node {
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return &nodes;
-    }
+    }*/
 
     void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         if (title.empty()) {
@@ -230,18 +271,18 @@ struct sec_node : node {
                 title += new_tokens[i].view();
             }
         }
-        else if (nodes.size() && debug_str_match(nodes.back()->type(), "text"))
-            nodes.back()->parse_tokens(std::move(new_tokens), tabs);
+        else if (_subtree.nodes.size() && debug_str_match(_subtree.nodes.back()->type(), "text"))
+            _subtree.nodes.back()->parse_tokens(std::move(new_tokens), tabs);
         else
-            nodes.push_back(new text_node(std::move(new_tokens)));
+            _subtree.nodes.push_back(new text_node(std::move(new_tokens)));
     }
 
-    void add_node(node* n) override {
+    /*void add_node(node* n) override {
         nodes.push_back(n);
-    }
+    }*/
 
 
-    void debug_print() const override {
+    /*void debug_print() const override {
         if (id != nullptr) {
             printf("%hhu", id[0]);
             for (uint8_t i = 1; i < depth + 1; ++i)
@@ -255,10 +296,31 @@ struct sec_node : node {
             putchar(' ');
         }
         puts(title.c_str());
+    }*/
+
+    std::string to_string() const override {
+        std::string result = "\033[35m";
+        if (id != nullptr) {
+            result += std::to_string(id[0]);
+            for (uint8_t i = 1; i < depth + 1; ++i) {
+                result += '.';
+                result += std::to_string(id[i]);
+            }
+            result += ' ';
+        }
+        else {
+            result += '?';
+            for (uint8_t i = 1; i < depth + 1; ++i)
+                result += ".?";
+            result += ' ';
+        }
+        result += "\033[0m";
+        return result += title.c_str();
     }
 
-    void final_pass() override {
-        const uint8_t nums = depth + 1;
+
+    ///void final_pass() override {
+        /*const uint8_t nums = depth + 1;
 
         if (sec_id.size() < nums) sec_id.push_back(0);
         else {
@@ -268,8 +330,8 @@ struct sec_node : node {
         ++sec_id.back();
 
         id = new uint8_t[sec_id.size()];
-        memcpy(id, sec_id.data(), sec_id.size());
-    }
+        memcpy(id, sec_id.data(), sec_id.size());*/
+    //}
 
     ~sec_node() override {
         if (id != nullptr) delete[] id;
@@ -293,14 +355,15 @@ struct sec_f : node_factory {
     }
 
     node* instance(uint8_t nesting, const options_t&) override {
-        //handle_depth(nesting);
-        return new sec_node(nesting);
+        handle_depth(nesting);
+        //return new sec_node(nesting);
+        return new sec_node(id);
     }
     
     node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>& map) override {
-        //handle_depth(depth);
+        handle_depth(depth);
 
-        sec_node* s = new sec_node(depth);
+        sec_node* s = new sec_node(id);
 
         if (map.contains("title")) {
             const char* ptr = map.at("title");
@@ -323,10 +386,10 @@ struct serializer<sec_node> {
     >;
 };
 
-struct list_node : node {
-    static uint32_t t_id;
+struct list_node : public group_node {
+    inline static uint32_t t_id;
 
-    std::vector<node*> nodes;
+    //std::vector<node*> nodes;
 
     virtual uint32_t type_id() const override {
         return t_id;
@@ -338,32 +401,34 @@ struct list_node : node {
     }
     
     uint8_t scope_end() override {
-        return scope_end::ENDL;
+        return scope_end::START;
     }
 
 
-    const std::vector<node*>* child_nodes() const override {
+    /*const std::vector<node*>* child_nodes() const override {
         return &nodes;
-    }
+    }*/
 
     void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
         std::string_view first = new_tokens[0].view();
-        if (nodes.empty() && first[0] != '-') nodes.push_back(new text_node(std::move(new_tokens)));
+        if (_subtree.nodes.empty() && first[0] != '-') _subtree.nodes.push_back(new text_node(std::move(new_tokens)));
         else if (first[0] == '-') {
             if (first.size() > 1) {
                 text_node* t = new text_node(std::move(new_tokens));
                 first = t->tokens[0].view();
                 t->tokens[0] = {{first.data() + 1, first.length() - 1}, false};
-                nodes.push_back(t);
+                _subtree.nodes.push_back(t);
             }
-            else nodes.push_back(new text_node(std::move(new_tokens), 1));
+            else _subtree.nodes.push_back(new text_node(std::move(new_tokens), 1));
         }
-        else nodes.back()->parse_tokens(std::move(new_tokens), tabs);
+        else _subtree.nodes.back()->parse_tokens(std::move(new_tokens), tabs);
     }
 
-    void add_node(node* n) override {
+    /*void add_node(node* n) override {
         nodes.push_back(n);
-    }
+    }*/
+
+    ~list_node() override = default;
 };
 
 struct list_f : node_factory {
@@ -377,7 +442,7 @@ struct list_f : node_factory {
 };
 
 struct code_node : node {
-    static uint32_t t_id;
+    inline static uint32_t t_id;
 
     enum token_type : uint8_t {
         NEWL, NONE, KEYWORD, TYPE
@@ -430,11 +495,15 @@ struct code_node : node {
         }
     }
 
-    virtual void debug_print() const override {
+    /*virtual void debug_print() const override {
         printf("[code](lang = %s)\n", lang.c_str());
-    }
+    }*/
 
     const std::vector<node*>* child_nodes() const override {
+        return nullptr;
+    }
+
+    modoc::tree* subtree() override {
         return nullptr;
     }
 
@@ -456,10 +525,4 @@ struct code_f : node_factory {
     }
 };
 
-uint32_t text_node::t_id = 0;
-uint32_t group_node::t_id = 0;
-uint32_t sec_node::t_id = 0;
-uint32_t list_node::t_id = 0;
-uint32_t code_node::t_id = 0;
-
-static std::unordered_map<std::string_view, node_factory*> nodes;
+inline std::unordered_map<std::string_view, node_factory*> node_factories;

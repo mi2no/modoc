@@ -1,19 +1,23 @@
 #pragma once
 
+#include <algorithm>
+#include <cstring>
+#include <iterator>
 #include <string>
+#include <string_view>
+#include <variant>
 #include <vector>
 #include <list>
 #include <cstdint>
 
-#include "node.hpp"
 #include "string_type.hpp"
 #include "value.hpp"
 
+#include "uninitialized_tree.hpp"
+
+struct node;
+
 namespace modoc {
-
-    constexpr char KEYWORD_CHAR = '@';
-    constexpr char EVALUATE_CHAR = '$';
-
     //static std::map<std::string_view, object> options;
     static options_t options;
 
@@ -33,28 +37,36 @@ namespace modoc {
             }
     }
 
-    static std::vector<modoc::string_type> tokenize(std::string_view str) { // TODO: add evaluation (EVALUATE_CHAR)
+    static std::vector<modoc::string_type> tokenize(std::string_view str, std::function<const value*(std::string_view)> get_variable = nullptr, bool copy = false) { // TODO: add evaluation (EVALUATE_CHAR)
         std::vector<modoc::string_type> tokens;
-        size_t token_begin;
-        bool token = false;
+        const char *token = nullptr;
 
-        for (auto itr = str.begin(); itr != str.end(); ++itr) {
-            if (token && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
-                tokens.emplace_back(std::string_view{str.begin() + token_begin, itr}, false);
-                token = false;
+        for (auto itr = str.begin(); itr < str.end(); ++itr) {
+            if (token != nullptr && (*itr == ' ' || *itr == '\t' || *itr == '\n')) {
+                tokens.emplace_back(std::string_view{token, itr}, copy);
+                token = nullptr;
             }
-            else if (!token) {
-                token = true;
-                token_begin = itr - str.begin();
+            else if (token == nullptr) {
+                if (*itr == EVALUATE_CHAR) {
+                    tokens.emplace_back(evaluate(itr + 1, &itr, get_variable), true);
+                    //printf("off: %zu\nend: %d\n", str.end() - itr, (int)*str.end());
+                }
+                else if (*itr != ' ' && *itr != '\t' && *itr != '\n') token = itr;   
             }
         }
 
-        if (token) tokens.emplace_back(std::string_view{str.begin() + token_begin, str.end()}, false);
+        if (token != nullptr) tokens.emplace_back(std::string_view{token, str.end()}, copy);
+
+        /*for (auto& t : tokens) {
+            const std::string_view view = t.view();
+            printf("\"%.*s\"\n", (int)view.size(), view.data());
+        }
+        fflush(stdout);*/
 
         return tokens;
     }
 
-    static void apply_meta(const std::vector<node*>& tree, const options_t& meta) {
+    /*static void apply_meta(const std::vector<node*>& tree, const options_t& meta) {
         for (node* n : tree) {
             for (const auto& entry : meta)
                 if (!n->meta.contains(entry.first))
@@ -63,184 +75,11 @@ namespace modoc {
             const std::vector<node*>* children = n->child_nodes();
             if (children != nullptr) apply_meta(*children, meta);
         }
-    }
+    }*/
 
     static bool primitives_only = true;
 
-    static std::vector<node*> create_tree(const char* const& buffer, const uint8_t init_depth = 0) {
-        std::vector<node*> result;
-        
-        size_t begin = 0, end = 0;
-        bool word = false;
-        //std::stack<keyword_instance*> stack;
-        std::stack<node*> stack;
-        std::vector<modoc::string_type> tokens;
-        std::map<std::string_view, value> meta;
-
-        for (size_t i = 0; buffer[i] != '\0'; ++i) {
-            size_t tabs = 0;
-            while (buffer[i] == '\t') {
-                ++tabs;
-                ++i;
-            }
-            while (tabs < stack.size()) {
-                if (tokens.size()) {
-                    //result += stack.top()->format(tokens, dependecies);
-                    stack.top()->parse_tokens(std::move(tokens), 0);
-
-                    tokens.clear();
-                }
-
-                //for (size_t n = 0; n < tabs; ++n) result += '\t';
-                //result += stack.top()->end;
-                //result += '\n';
-                //delete stack.top();
-                stack.pop();
-            }
-            
-            // Line
-            while (buffer[i] != '\0') {
-                if ((stack.empty() || !stack.top()->verbatim()) && buffer[i] == EVALUATE_CHAR) {
-                    ++i; // Skip EVALUATE_CHAR
-                    const char* end = buffer + i;
-                    const std::string result = evaluate(end, &end);
-                    
-                    tokens.emplace_back(result, true);
-                    i = end - buffer;
-                }
-                else if (word && buffer[begin] == KEYWORD_CHAR && buffer[i] > ' ') {
-                    if (buffer[i] == '[') {
-                        end = i;
-                        size_t x = parse_options(buffer + i, options);//get_options(buffer + i + 1, options);
-                        i += x;
-                        printf("Read %zu\n", x);
-                    }
-                    else if (buffer[i] == '{') {
-                        const size_t read = parse_options(buffer + i, meta, '}');
-                        printf("Read %zu (meta)\n", read);
-                        i += read;
-                    }
-                }
-                else if (buffer[i] > ' ' && !word) {
-                    begin = i;
-                    word = true;
-                }
-                else if (buffer[i] <= ' ') {
-                    if (word) {
-                        if (end <= begin) end = i;
-                        word = false;
-
-                        if (buffer[begin] == KEYWORD_CHAR) {
-                            std::string_view view{buffer + begin + 1, end - begin - 1};
-
-                            if (nodes.contains(view)) {
-                                if (tokens.size()) {
-                                    //if (stack.size()) result += stack.top()->format(tokens, dependecies);
-                                    //else put_tokens(result, tokens);
-                                    if (stack.size()) stack.top()->parse_tokens(std::move(tokens), (stack.size() < tabs) * (tabs - stack.size()));
-                                    else result.push_back(new text_node(std::move(tokens)));
-
-                                    tokens.clear();
-                                }
-
-                                /*const keyword* k = keywords[view];
-                                keyword_instance* ik = k->get_instance(tabs, options);
-                                options.clear();*/
-
-                                //printf("scope: %hhu\n", ik->scope_end());
-
-                                /*if (ik->scope_end() == START) {
-                                    result += ik->format(tokens, dependecies);
-                                    delete ik;
-                                }
-                                else*/ {
-                                    //stack.push(ik);
-                                    node* instance = nodes[view]->instance(tabs + init_depth, options);
-                                    options.clear();
-
-                                    if (meta.size()) {
-                                        instance->add_meta(meta);
-                                        meta.clear();
-                                    }
-
-                                    if (!instance->is_primitive()) primitives_only = false;
-                                    
-                                    if (stack.size()) stack.top()->add_node(instance);
-                                    else result.push_back(instance);
-                                    
-                                    stack.push(instance);
-
-                                    //for (size_t n = 0; n < tabs; ++n) result += '\t';
-                                    //result += ik->begin;
-                                }
-                            }
-                            //else result.append(buffer + begin, end - begin);
-                            else tokens.push_back({{buffer + begin, end - begin}, false});
-                        }
-                        else {
-                            tokens.push_back({{buffer + begin, end - begin}, false});
-                            //result.append(buffer + begin, end - begin);
-                        }
-                    }
-                    //result += buffer[i];
-                    //TODO maybe remove this?
-                    if (buffer[i] == '\n') {
-                        //tokens.push_back({nullptr, 0});
-                        break;
-                    }
-                }
-                ++i;
-            }
-            
-            if (stack.size()) {
-                if (tokens.size()/* > 1*/) {
-                    //tokens.pop_back(); // remove \n -> std::stringview{nullptr, 0} token
-                    //result += stack.top()->format(tokens, dependecies);
-                    stack.top()->parse_tokens(std::move(tokens), (stack.size() < tabs) * (tabs - stack.size()));
-                    tokens.clear();
-                }
-
-                //result += stack.top()->end;
-                //result += '\n';
-                //delete stack.top();
-                //stack.pop();
-            }
-
-            /*if (stack.size() && stack.top()->scope_end() == ENDL) {
-                if (tokens.size() > 1) {
-                    tokens.pop_back();
-                    //result += stack.top()->format(tokens, dependecies);
-                    stack.top()->nodes.push_back(new text_node(tokens));
-                    tokens.clear();
-                }
-
-                //result += stack.top()->end;
-                //result += '\n';
-                //delete stack.top();
-                stack.pop();  
-            }*/
-        }
-
-        while (stack.size()) {
-    if (tokens.size()) {
-                //result += stack.top()->format(tokens, dependecies);
-                stack.top()->parse_tokens(std::move(tokens), 0);
-                tokens.clear();
-            }
-
-            //result += stack.top()->end;
-            //result += '\n';
-            //delete stack.top();
-            stack.pop();
-        }
-
-        //put_tokens(result, tokens);
-        if (tokens.size()) result.push_back(new text_node(std::move(tokens)));
-
-        return result;
-    }
-
-    static void print_node(const node* n, std::list<uint8_t>& sec_id, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) {
+    /*static void print_node(const node* n, std::list<uint8_t>& sec_id, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) {
         //putchar('+');
 
         for (std::list<bool>::iterator itr = branch_end.begin(); itr != --branch_end.end(); ++itr) {
@@ -252,7 +91,7 @@ namespace modoc {
         else fputs("\u2514", stdout); 
 
         if (is_list_elm) fputs("\u2500\u25A1", stdout); // \u25CF - full circle  \u25EF - circle
-        else fputs("\u2500\u2500", stdout);
+        else fputs("\u2500\u2500", stdout);*/
 
         /*if (debug_str_match(n->type(), "section")) {
             ++sec_id.back();
@@ -261,7 +100,7 @@ namespace modoc {
             sec_id.push_back(0);
         }*/
 
-        printf("[%u]", n->type_id());
+        /*printf("[%u]", n->type_id());
         n->debug_print();
         ++nest;
 
@@ -279,9 +118,9 @@ namespace modoc {
         //if (debug_str_match(n->type(), "section")) sec_id.pop_back();
 
         //delete n;
-    }
+    }*/
 
-    static void print_doc_tree(const std::vector<node*>& tree) {
+    /*static void print_doc_tree(const std::vector<node*>& tree) {
         //puts("untitled");
         puts("\u25CF");
         std::list<uint8_t> sec_id;
@@ -337,5 +176,156 @@ namespace modoc {
             n->final_pass();
             if (n->child_nodes() != nullptr) tree_final_pass(*n->child_nodes());
         }
-    }
-};
+    }*/
+
+    struct tree {
+
+        struct layered_var {
+            value v;//value;
+            uint32_t begin_ind;
+            bool overwrite;
+        };
+
+        std::vector<node*> nodes;
+        std::map</*modoc::string_type*/std::string, std::vector<layered_var>> variables;
+        //uint32_t ind = 0;
+
+        modoc::tree* parent_tree = nullptr;
+
+    private:
+
+        static tree initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text = false); 
+        static tree initialize(tree* parent, std::vector<uninitialized_tree::unode>& unodes, const uint8_t depth = 0, const bool copy_text = false);
+
+        //void print_node(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
+        std::string node_to_str(const node* n, std::list<bool>& branch_end, bool is_list_elm, size_t nest = 0) const;
+
+
+        void _assign_at(std::string_view _name, value&& v, bool overwrite, uint32_t ind) {
+            std::string name = std::string(_name);
+
+            puts("\033[1mBefore\033[0m");
+            puts(to_string().c_str()); 
+            
+            //printf("[tree] %s : %s\n", name.c_str(), v.to_string().c_str());
+            if (variables.contains(name)) {
+                auto& stack = variables.at(name);
+                /*if (stack.back().begin_ind == ind) {
+                    stack.back().v = std::move(v);
+                    stack.back().overwrite = overwrite;
+                }
+                else*/ stack.emplace_back(std::move(v), ind, overwrite);
+            }
+            else {
+                auto& stack = variables[name] = {};
+                variables[name].push_back({std::move(v), ind, overwrite});
+            }
+            //printf("Variables: %zu\n", variables.size());
+
+            puts("\033[1mAfter\033[0m");
+            puts(to_string().c_str()); 
+        }
+
+
+    public:
+
+        tree() = default;
+
+        tree(tree&& t) {
+            nodes = std::move(t.nodes);
+            variables = std::move(t.variables);
+            //ind = t.ind;
+
+            t.nodes.clear();
+            t.variables.clear();
+        }
+
+        static tree initialize(uninitialized_tree u_tree) {
+            return initialize(nullptr, u_tree.nodes, 0);
+        }
+
+        void assign(std::string_view name, value&& v, bool overwrite = false) {
+            _assign_at(name, std::move(v), overwrite, nodes.size());
+        }
+
+        const value* get_variable(std::string_view _name) const {
+            std::string name = std::string(_name);
+            
+            if (variables.contains(name)) return &variables.at(name).back().v;
+            if (parent_tree != nullptr) return parent_tree->get_variable(_name);
+            else return nullptr;
+        }
+
+        void combine(modoc::tree&& tree); 
+        void insert_node(node* n);
+
+        /*void print() const {
+            puts("\u25CF");
+            std::list<bool> branch_end;
+            branch_end.push_back(false);
+
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                branch_end.back() = i == nodes.size() - 1;
+                print_node(nodes[i], branch_end, false);
+            }
+
+            printf("Variables: %zu\n", variables.size());
+            for (const auto& entry : variables) {
+                auto stack = entry.second;
+                printf("$%s:\n", entry.first.c_str());
+                
+                while (stack.size()) {
+                    printf("\t%u : %s\n", stack.top().begin_ind, stack.top().v.to_string().c_str());
+                    stack.pop();
+                }
+            }
+        }*/
+        
+        std::string to_string() const {
+            std::string result = "\u25CF\n";
+            std::list<bool> branch_end;
+            branch_end.push_back(false);
+
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                branch_end.back() = i == nodes.size() - 1;
+                result += node_to_str(nodes[i], branch_end, false);
+            }
+
+            //printf("Variables: %zu\n", variables.size());
+            for (const auto& entry : variables) {
+                auto stack = entry.second;
+                result += entry.first;
+                result += '\n';
+                
+                for (const layered_var& lv : entry.second) {
+                    result += '\t';
+                    result += std::to_string(lv.begin_ind);
+                    result += ' ';
+                    result += lv.v.to_string();
+                    result += '\n';
+                }
+            }
+
+            return result;
+        }
+
+        void destroy_node(node* n);
+
+        void destroy_tree(std::vector<node*>& tree) {
+            for (node* n : tree) {
+                destroy_node(n);
+            }
+            tree.clear();
+        }
+
+        void clear();
+
+        ~tree() {
+            clear();
+            ++destroy_count;
+        }
+
+        inline static uint16_t destroy_count = 0;
+    };
+   
+}

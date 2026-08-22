@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -11,6 +12,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "log.hpp"
+
 #include "node.hpp"
 //#include "options.hpp"
 #include "value.hpp"
@@ -22,6 +25,7 @@
 #include "nodes/meta.hpp"
 #include "nodes/code.hpp"
 #include "nodes/assign.hpp"
+#include "nodes/if.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -51,7 +55,7 @@
 
 #include <dlfcn.h>
 
-void to_doc(const std::vector<node*>& tree, const char* backend_path) {
+double to_doc(const modoc::tree& tree, const char* backend_path) {
     void* handle = dlopen(backend_path, RTLD_LAZY);
 
     if (!handle) {
@@ -66,31 +70,17 @@ void to_doc(const std::vector<node*>& tree, const char* backend_path) {
         fputs("Error 2\n", stderr);
     }
 
-    f_handle(tree);
+    const auto start = std::chrono::high_resolution_clock::now();
+    f_handle(tree.nodes);
+
+    return (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start)).count();
 }
 
 void register_node_factory(const char* sym, node_factory* nf) {
     static uint32_t type_id_itr = 1; // 0 - text_node
     
     nf->set_node_type_id(type_id_itr++);
-    nodes[sym] = nf;
-}
-
-
-void destroy_node(node* n) {
-    const std::vector<node*>* children = n->child_nodes();
-
-    if (children != nullptr)
-        for (node* ch : *children)
-            destroy_node(ch);
-
-    delete n;
-}
-
-void destroy_tree(std::vector<node*>& tree) {
-    for (node* n : tree)
-        destroy_node(n);
-    tree.clear();
+    node_factories[sym] = nf;
 }
 
 #include <filesystem>
@@ -131,6 +121,10 @@ bool str_match(const char* a, const char* b) {
 int main(int argc, char** argv) {
 
     // ./main [src_file] --backend
+    
+    //{
+        modoc::logger log;
+    //}
     
     std::vector<std::string> backends;
     get_backends(backends);
@@ -177,6 +171,7 @@ int main(int argc, char** argv) {
     register_node_factory("code", new code_f());
     register_node_factory("gen", new gen_f());
     register_node_factory("repeat", new repeat_f());
+    register_node_factory("if", new if_f());
     register_node_factory("meta", new meta_f());
     register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());
@@ -184,6 +179,8 @@ int main(int argc, char** argv) {
     register_constant("code.lang.cpp", {"cpp"});
     register_constant("gen.mode.modoc", {gen_node::MODOC});
     register_constant("gen.mode.json", {gen_node::JSON});
+
+    printf("Node factories: %zu\n", node_factories.size());
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);
@@ -202,30 +199,40 @@ int main(int argc, char** argv) {
     result = "\\documentclass{article}\n\\usepackage[left=2.5cm,top=2.5cm,right=2.5cm,bottom=2.5cm]{geometry}\n" + header + result;
     puts(result.c_str());*/
 
-    std::vector<node*> tree = modoc::create_tree(buffer);
+    /*std::vector<node*> tree = modoc::create_tree(buffer);
 
     puts("Document tree structure:\n");
-    modoc::print_doc_tree(tree);
+    modoc::print_doc_tree(tree);*/
 
-    if (!modoc::primitives_only) {
+    log.width = 120;
+
+    modoc::uninitialized_tree un_tree = modoc::uninitialized_tree::parse_document(buffer);
+    log.log("modoc", "uninit tree", un_tree.to_string());
+
+    modoc::tree tree = modoc::tree::initialize(std::move(un_tree));
+    log.log("modoc", "core tree", tree.to_string());
+
+    /*if (!modoc::primitives_only) {
         puts("To primitives:\n");
         modoc::to_primitive_tree(tree);
         modoc::print_doc_tree(tree);
     }
 
     modoc::tree_final_pass(tree);
-    modoc::print_doc_tree(tree);
+    modoc::print_doc_tree(tree);*/
 
-    to_doc(tree, backends[backend_id].c_str());
+    const double time = to_doc(tree, backends[backend_id].c_str());
 
-    printf("\nCompiled via %s backend. (%s)\n", argv[2] + 2, backends[backend_id].c_str());
+    log.log("modoc", "summary", std::string("Compiled via ") + (argv[2] + 2) + " backend.\nTime: " + std::to_string(time) + "s");
 
-    destroy_tree(tree);
+    //destroy_tree(tree);
     free(buffer);
 
-    for (const auto ent : nodes) {
+    for (const auto ent : node_factories) {
         delete ent.second;
     }
+
+    log.log("modoc", "tree", std::string("Destroyed subtrees: ") + std::to_string(modoc::tree::destroy_count));
 
     return 0;
 }
