@@ -96,7 +96,7 @@ namespace modoc {
 
     public:
 
-        std::string to_string(std::string_view context, std::string_view title, std::string_view content, type_t type = LOG) const {
+        static std::string to_string(std::string_view context, std::string_view title, std::string_view content, uint16_t width, type_t type = LOG) {
             std::string result;
 
             const std::string color = type == LOG ? "\033[32m" : "\033[31m";
@@ -203,8 +203,26 @@ namespace modoc {
             fputs(CORNER_ROUND_BOTTOM_LEFT, out);
             for (uint16_t i = 0; i < width - 2; ++i) fputs(LINE_HORIZONTAL, out);
             fputs(CORNER_ROUND_BOTTOM_RIGHT, out);*/
-            std::string result = to_string(context, title, content);
+            std::string result = to_string(context, title, content, width, type);
             fputs(result.c_str(), out);
+        }
+
+        static void s_log(std::string_view context, std::string_view title, std::string_view content, type_t type = LOG, uint16_t width = 100) {
+            std::string result = to_string(context, title, content, 100, type);
+            fputs(result.c_str(), stdout);
+        }
+
+        template <typename... T>
+        static void log_f(std::string_view context, std::string_view title, type_t type, std::string_view format, T... args) {
+            size_t size = snprintf(nullptr, 0, format.data(), args...);
+            char* buff = new char[size];
+            snprintf(buff, size, format.data(), args...);
+            
+            std::string_view content = {buff, buff + size};
+            std::string result = to_string(context, title, content, 100);
+            fputs(result.c_str(), stdout);
+
+            delete[] buff;
         }
     };
 }

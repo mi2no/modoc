@@ -1,10 +1,14 @@
 #pragma once
 
+#include "log.hpp"
 #include <charconv>
+#include <cmath>
+#include <concepts>
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
 #include <functional>
+#include <stack>
 #include <string>
 #include <string_view>
 #include <span>
@@ -14,6 +18,8 @@
 #include <cstdio> //////
 
 struct value;
+
+// TODO: replace string_view with string
 
 static std::unordered_map<std::string_view, value> constants;
 
@@ -62,6 +68,34 @@ struct value {
         memcpy(data.string.ptr, str.data(), data.string.size);
     }
 
+    template <typename T> requires std::same_as<std::remove_cvref<T>, bool>
+    value(T&& b) {
+        type = BOOLEAN;
+        data.boolean = b;
+    }
+
+    static value from_boolean(bool b) {
+        value result;
+        result.type = BOOLEAN;
+        result.data.boolean = b;
+        return result;
+    }
+
+    /*static value from_function(std::function<value(std::map<std::string, value>)> func) {
+
+    }
+
+    static value from_object(std::map<std::string, value> map) {
+
+    }*/
+
+    static value null() {
+        value result;
+        result.type = NONE;
+        return result;
+    }
+
+
     // Copy constructor
     value(const value& v) {
         type = v.type;
@@ -85,7 +119,14 @@ struct value {
         if (type == STRING) puts("str moved!");
     }
 
+    void clear() {
+        if (type == LIST) delete[] data.list.ptr;
+        else if (type == STRING && data.string.copy) delete[] data.string.ptr;
+        type = NONE;
+    }
+
     value& operator=(const value& v) {
+        //clear();
         type = v.type;
         data = v.data;
         
@@ -102,6 +143,7 @@ struct value {
     }
     
     value& operator=(value&& v) {
+        //clear();
         type = v.type;
         data = v.data;
 
@@ -346,9 +388,12 @@ struct value {
             const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
             if (v != nullptr) {
                 result = *v;
+                str = c;
             }
-            else if (constants.contains(name))
+            else if (constants.contains(name)) {
                 result = constants.at(name);
+                str = c;
+            }
         }
 
         *read_end = str;
@@ -372,6 +417,61 @@ struct value {
         return {data.list.ptr, data.list.ptr + data.list.size};
     }
 
+    
+    // Operators
+    value operator+(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return {number() + v.number()};
+        return *this;
+    }
+    value& operator+=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) data.number += v.number();
+        return *this;
+    }
+    
+    value operator-(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return {number() - v.number()};
+        return *this;
+    }
+    value& operator-=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) data.number -= v.number();
+        return *this;
+    }
+
+    value operator*(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return {number() * v.number()};
+        return *this;
+    }
+    value& operator*=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) data.number *= v.number();
+        return *this;
+    }
+
+    value operator/(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return {number() / v.number()};
+        return *this;
+    }
+    value& operator/=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) data.number /= v.number();
+        return *this;
+    }
+
+    value operator^(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return {std::pow(number(), v.number())};
+        return *this;
+    }
+    value& operator^=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) data.number = std::pow(number(), v.number());
+        return *this;
+    }
+
+    value operator==(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return value::from_boolean(number() == v.number());
+        return *this;
+    }
+    value operator!=(const value& v) {
+        if (type == NUMBER && v.type == NUMBER) return value::from_boolean(number() != v.number());
+        return *this;
+    }
 
     std::string to_string() const {
         switch ((uint8_t)type) {
@@ -397,8 +497,7 @@ struct value {
     }
 
     ~value() {
-        if (type == LIST) delete[] data.list.ptr;
-        else if (type == STRING && data.string.copy) delete[] data.string.ptr;
+        clear();
     }
 };
 
@@ -454,6 +553,88 @@ static void parse_options(std::string_view view, options_t& ops, std::function<c
             is_value = false;
         }
     }
+}
+
+enum operator_e : uint8_t {
+    UNKNOWN, ADD, SUBTRACT, MULTIPLY, DIVIDE, POWER, EQUAL, NOT_EQUAL
+};
+
+inline operator_e get_operator(std::string_view view) {
+    if (view == "+") return ADD;
+    else if (view == "-") return SUBTRACT;
+    else if (view == "*") return MULTIPLY;
+    else if (view == "/") return DIVIDE;
+    else if (view == "^") return POWER;
+    else if (view == "==") return EQUAL;
+    else if (view == "!=") return NOT_EQUAL;
+    return UNKNOWN;
+}
+
+static value calc(std::string_view view, std::function<const value*(std::string_view)> get_variable = nullptr) {
+    std::stack<value> values;
+    std::stack<operator_e> operators;
+
+    modoc::logger::s_log("value", "calc", view);
+
+    for (const char* ptr = view.begin(); ptr < view.end(); ++ptr) {
+        value v1 = value::parse({ptr, view.end()}, &ptr, get_variable);
+        
+        while (ptr != view.end() && *ptr <= ' ') ++ptr;
+        if (ptr == view.end()) break;
+
+        std::string_view op_str;
+        { // Operator
+            const char* op_begin = ptr;
+            while (ptr != view.end() && *ptr > ' ') ++ptr;
+            op_str = {op_begin, ptr};
+        }
+        const operator_e op = get_operator(op_str);
+
+        while (ptr != view.end() && *ptr <= ' ') ++ptr;
+        if (ptr == view.end()) break;
+
+        value v2 = value::parse({ptr, view.end()}, &ptr, get_variable);
+
+        modoc::logger::log_f("value", "calc", modoc::logger::LOG, "%s %c %s", v1.to_string().c_str(), op, v2.to_string().c_str());
+
+        if (op == MULTIPLY) values.push(v1 * v2);
+        else if (op == DIVIDE) values.push(v1 / v2);
+        else if (op == POWER) values.push(v1 ^ v2);
+        else if (op == UNKNOWN) {
+            modoc::logger::s_log("value", "calc", std::string("Invalid operator: '") + op_str.data() + '\'');
+            return value::null(); 
+        }
+        else {
+            values.push(std::move(v1));
+            values.push(std::move(v2));
+            operators.push(op);
+        }
+    }
+
+    printf("ops: %zu, vs: %zu\n", operators.size(), values.size());
+
+    while (values.size() > 1) {
+        const value v = std::move(values.top());
+        values.pop();
+
+        switch (operators.top()) {
+            case ADD:
+                values.top() += v;
+                break;
+            case SUBTRACT:
+                values.top() -= v;
+                break;
+            case EQUAL:
+                values.top() = values.top() == v;
+                break;
+            case NOT_EQUAL:
+                values.top() = values.top() != v;
+                break;
+        }
+        operators.pop();
+    }
+
+    return std::move(values.top());
 }
 
 static std::string evaluate(const char* str, const char** end, std::function<const value*(std::string_view)> get_variable = nullptr) {
