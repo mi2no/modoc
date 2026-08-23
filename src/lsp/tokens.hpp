@@ -6,7 +6,7 @@
 
 struct token {
     enum token_e : uint8_t {
-        KEYWORD, NONE
+        KEYWORD, OPERATOR, STRING, NUMBER, COMMENT, VARIABLE, NONE
     };
 
     uint32_t line;
@@ -15,30 +15,53 @@ struct token {
     uint8_t type;
 };
 
-static std::vector<token> tokenize(/*std::string_view*/ const char* str) {
+static std::vector<token> tokenize(std::string_view str) {
     std::vector<token> result{};
 
     token t {0, 0, 0};
-    const char* begin = str;
-    while (*str != '\0') {
-        while (*str == ' ' || *str == '\n' || *str == '[' || *str == ']') {
-            if (*str == '\n') {
-                ++t.line;
-                begin = str;
-            }
-            ++str;
+    const char *begin = str.data(), *ptr = str.data();
+    while (ptr < str.end()) {
+        if (*ptr == '\n') {
+            ++t.line;
+            t.col = 0;
+            ++ptr;
         }
+        else if (*ptr == '@') {
+            t.type = token::KEYWORD;
+            begin = ptr;
 
-        t.col = str - begin;
+            while (ptr < str.end() && *ptr > ' ' && *ptr != '[' && *ptr != '(' && *ptr != '{' && *ptr != '$') ++ptr;
 
-        if (*str == '@') t.type = token::KEYWORD;
-        else t.type = token::NONE;
-
-        while (*str != ' ' && *str != '[' && *str != ']' && *str != '\n' && *str != '\0') ++str;
-
-        if (t.type != token::NONE) {
-            t.len = str - begin + t.col;
+            t.len = ptr - begin;
+            
             result.push_back(t);
+
+            t.col += t.len;
+        }
+        else if (*ptr == '$') {
+            t.type = token::OPERATOR;
+
+            t.len = 1;
+            result.push_back(t);
+
+            ++ptr;
+            ++t.col;
+        }
+        else if (*ptr > ' ') {
+            t.type = token::NONE;
+            begin = ptr;
+
+            while (ptr < str.end() && *ptr > ' ' && *ptr != '$') ++ptr;
+
+            t.len = ptr - begin;
+
+            result.push_back(t);
+
+            t.col += t.len;
+        }
+        else {
+            ++ptr;
+            ++t.col;
         }
     }
 
@@ -49,15 +72,26 @@ static std::string tokenize_json(const char* str, uint32_t id) {
     std::vector<token> tokens = tokenize(str);
     std::string json = std::string("{\"jsonrpc\":\"2.0\",\"id\":") + std::to_string(id) + ",\"result\":{\"data\":[";
 
+    const token* prev = nullptr;
     for (size_t i = 0; i < tokens.size(); ++i) {
         const token& t = tokens[i];
 
-        json += std::to_string(t.line) + ',';
-        json += std::to_string(t.col) + ',';
+        if (t.type == token::NONE) continue;
+
+        uint32_t line = t.line, col = t.col;
+
+        if (prev != nullptr) {
+            json += ',';
+
+            line -= prev->line;
+            if (line == 0) col -= prev->col;
+        }
+
+        prev = &t;
+        json += std::to_string(line) + ',';
+        json += std::to_string(col) + ',';
         json += std::to_string(t.len) + ',';
         json += std::to_string((uint16_t)t.type) + ",0";
-
-        if (i < tokens.size() - 1) json += ',';
     }
 
     json += "]}}";

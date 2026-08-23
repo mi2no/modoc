@@ -314,7 +314,7 @@ struct value {
         value result;
         const char *str = view.data(), * const end = view.end();
 
-        while (str != end && (*str == ' ' || *str == '\n')) ++str;
+        while (str != end && *str <= ' ') ++str;
 
         if (str == end) {
             *read_end = str;
@@ -576,40 +576,62 @@ static value calc(std::string_view view, std::function<const value*(std::string_
 
     modoc::logger::s_log("value", "calc", view);
 
-    for (const char* ptr = view.begin(); ptr < view.end(); ++ptr) {
-        value v1 = value::parse({ptr, view.end()}, &ptr, get_variable);
-        
+    bool is_value = true;
+
+    for (const char* ptr = view.begin(); ptr < view.end(); ++ptr, is_value = !is_value) {
         while (ptr != view.end() && *ptr <= ' ') ++ptr;
         if (ptr == view.end()) break;
 
-        std::string_view op_str;
-        { // Operator
-            const char* op_begin = ptr;
-            while (ptr != view.end() && *ptr > ' ') ++ptr;
-            op_str = {op_begin, ptr};
-        }
-        const operator_e op = get_operator(op_str);
+        if (is_value) {
+            value v = value::parse({ptr, view.end()}, &ptr, get_variable);
+            //if (v.type == NONE) err
 
-        while (ptr != view.end() && *ptr <= ' ') ++ptr;
-        if (ptr == view.end()) break;
-
-        value v2 = value::parse({ptr, view.end()}, &ptr, get_variable);
-
-        modoc::logger::log_f("value", "calc", modoc::logger::LOG, "%s %c %s", v1.to_string().c_str(), op, v2.to_string().c_str());
-
-        if (op == MULTIPLY) values.push(v1 * v2);
-        else if (op == DIVIDE) values.push(v1 / v2);
-        else if (op == POWER) values.push(v1 ^ v2);
-        else if (op == UNKNOWN) {
-            modoc::logger::s_log("value", "calc", std::string("Invalid operator: '") + op_str.data() + '\'');
-            return value::null(); 
+            if (operators.empty()) values.push(std::move(v));
+            else {
+                /*if (operators.top() == MULTIPLY) {
+                    values.top() *= v;
+                    operators.pop();
+                }
+                else if (operators.top() == DIVIDE) {
+                    values.top() /= v;
+                    operators.pop();
+                }
+                else*/
+                if (operators.top() == POWER) {
+                    values.top() ^= v;
+                    operators.pop();
+                }
+                else values.push(std::move(v));
+            }
         }
         else {
-            values.push(std::move(v1));
-            values.push(std::move(v2));
-            operators.push(op);
+            std::string_view op_str;
+            { // Operator
+                const char* op_begin = ptr;
+                while (ptr != view.end() && *ptr > ' ') ++ptr;
+                op_str = {op_begin, ptr};
+            }
+            
+            const operator_e op = get_operator(op_str);  
+            if (op == UNKNOWN) {
+                modoc::logger::s_log("value", "calc", std::string("Invalid operator: '") + op_str.data() + '\'');
+                return value::null(); 
+            }
+            else if (operators.size() && op != POWER && (operators.top() == MULTIPLY || operators.top() == DIVIDE)) {
+                value v = values.top();
+                values.pop();
+
+                if (operators.top() == MULTIPLY) values.top() *= v;
+                else values.top() /= v;
+
+                operators.pop();
+                operators.push(op);
+            }
+            else operators.push(op);
         }
     }
+
+    //if (operators.size() != values.size() - 1) err
 
     printf("ops: %zu, vs: %zu\n", operators.size(), values.size());
 
@@ -629,6 +651,15 @@ static value calc(std::string_view view, std::function<const value*(std::string_
                 break;
             case NOT_EQUAL:
                 values.top() = values.top() != v;
+                break;
+
+            // Since MUL & DIV are handled in the for loop before, these operators can only appear once 
+            // on the very top of the stack (first while iteration; if the equation ends with them).
+            case MULTIPLY:
+                values.top() *= v;
+                break;
+            case DIVIDE:
+                values.top() /= v;
                 break;
         }
         operators.pop();
