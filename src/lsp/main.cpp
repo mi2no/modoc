@@ -56,7 +56,7 @@ std::string temp_format_escape_chars(std::string&& str) {
     return str;    
 }
 
-constexpr const char* init = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"operator\",\"string\",\"number\",\"comment\",\"variable\"],\"tokenModifiers\":[]},\"full\":true}}}}";
+constexpr const char* init = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{},\"semanticTokensProvider\":{\"legend\":{\"tokenTypes\":[\"keyword\",\"operator\",\"string\",\"number\",\"comment\",\"variable\",\"property\",\"parameter\",\"boolean\",\"node\"],\"tokenModifiers\":[]},\"full\":true}}}}";
 
 bool handle_msg(std::string_view msg) {
     const char* ptr = msg.data();
