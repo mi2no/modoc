@@ -120,8 +120,24 @@ struct new_code_node : special_node {
 };
 
 struct new_code_f : node_factory {
+    void init() override { 
+        value obj = value::from_object({});
+
+        { // lang
+            value lang = value::from_object({});
+            lang.object()["cpp"] = {"cpp"};
+
+            obj.object()["lang"] = std::move(lang);
+        }
+
+        register_constant("code", obj);
+    }
+
     node* instance(uint8_t, const options_t& op) override {
-        return new new_code_node((std::string)op.at("lang").string());
+        if (op.contains("lang") && op.at("lang").type() == value::STRING) {
+            return new new_code_node((std::string)op.at("lang").string());
+        }
+        return nullptr;
     }
 
     void set_node_type_id(uint32_t id) const override {

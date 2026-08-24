@@ -79,6 +79,7 @@ struct node {
 };
 
 struct node_factory {
+    virtual void init() {};
     virtual node* instance(uint8_t nesting, const options_t&) = 0;
     virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
     virtual void set_node_type_id(uint32_t) const = 0;
@@ -517,7 +518,10 @@ struct code_node : node {
 
 struct code_f : node_factory {
     node* instance(uint8_t, const options_t& op) override {
-        return new code_node((std::string)op.at("lang").string());
+        if (op.contains("lang") && op.at("lang").type() == value::STRING) {
+            return new code_node((std::string)op.at("lang").string());
+        }
+        return nullptr;
     }
 
     void set_node_type_id(uint32_t id) const override {

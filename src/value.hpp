@@ -1,6 +1,5 @@
 #pragma once
 
-#include "log.hpp"
 #include <charconv>
 #include <cmath>
 #include <concepts>
@@ -16,6 +15,10 @@
 #include <unordered_map>
 
 #include <cstdio> //////
+#include <variant>
+
+#include "log.hpp"
+#include "util.hpp"
 
 struct value;
 
@@ -28,7 +31,7 @@ typedef std::map<std::string_view, value> options_t;
 struct value {
 
     enum type_e : uint8_t {
-        NONE, BOOLEAN, NUMBER, STRING, LIST
+        NONE, BOOLEAN, NUMBER, STRING, LIST, OBJECT, FUNCTION
     };
 
     struct string_data {
@@ -42,119 +45,122 @@ struct value {
         size_t size;
     };
 
-    union value_data {
+    /*union value_data {
         bool boolean;
         double number;
         string_data string;
         list_data list;
 
         value_data() : boolean(false) {}
-    } data;
+    } data;*/
 
-    type_e type = NONE;
+    using object_t = std::map<std::string, value, std::less<>>;
+    using function_t = std::function<value(object_t)>;
+
+    using value_type = std::variant<
+        std::nullptr_t,
+        bool,
+        double,
+        /*string_data,
+        list_data,*/
+        std::string,
+        std::vector<value>,
+        object_t, // OBJECT
+        function_t // FUNCTION
+    >;
+
+    value_type data = nullptr;
+
+    //type_e type = NONE;
 
     value() = default;
 
-    value(double num) {
-        type = NUMBER;
-        data.number = num;
-    }
+    value(double num) : data(num) {}
 
     value(std::string_view str) {
-        type = STRING;
-        data.string.size = str.size();
+        /*data.string.size = str.size();
         data.string.ptr = new char[data.string.size];
         data.string.copy = true;
-        memcpy(data.string.ptr, str.data(), data.string.size);
-    }
-
-    template <typename T> requires std::same_as<std::remove_cvref<T>, bool>
-    value(T&& b) {
-        type = BOOLEAN;
-        data.boolean = b;
+        memcpy(data.string.ptr, str.data(), data.string.size);*/
+        data = std::string(str);
     }
 
     static value from_boolean(bool b) {
         value result;
-        result.type = BOOLEAN;
-        result.data.boolean = b;
+        result.data = b;
         return result;
     }
 
     /*static value from_function(std::function<value(std::map<std::string, value>)> func) {
 
-    }
-
-    static value from_object(std::map<std::string, value> map) {
-
     }*/
 
-    static value null() {
+    static value from_object(object_t&& map) {
         value result;
-        result.type = NONE;
+        result.data = std::move(map);
         return result;
+    }
+
+    static value null() {
+        return {};
+    }
+
+
+    type_e type() const {
+        return type_e(data.index()); 
     }
 
 
     // Copy constructor
     value(const value& v) {
-        type = v.type;
         data = v.data;
         
-        if (type == STRING && data.string.copy) {
+        /*if (type() == STRING && data.string.copy) {
             data.string.ptr = new char[data.string.size];
             memcpy((char*)data.string.ptr, v.data.string.ptr, data.string.size);
         }
         else if (type == LIST) {
             data.list.ptr = new value[data.list.size];
             for (size_t i = 0; i < data.list.size; ++i) data.list.ptr[i] = v.data.list.ptr[i];
-        }
+        }*/
     }
 
     value(value&& v) {
-        type = v.type;
-        data = v.data;
-
-        v.type = NONE;
-        if (type == STRING) puts("str moved!");
+        data = std::move(v.data);
+        v.data = nullptr;
     }
 
-    void clear() {
+    /*void clear() {
         if (type == LIST) delete[] data.list.ptr;
         else if (type == STRING && data.string.copy) delete[] data.string.ptr;
         type = NONE;
-    }
+    }*/
 
     value& operator=(const value& v) {
         //clear();
-        type = v.type;
         data = v.data;
         
-        if (type == STRING && data.string.copy) {
+        /*if (type == STRING && data.string.copy) {
             data.string.ptr = new char[data.string.size];
             memcpy((char*)data.string.ptr, v.data.string.ptr, data.string.size);
         }
         else if (type == LIST) {
             data.list.ptr = new value[data.list.size];
             for (size_t i = 0; i < data.list.size; ++i) data.list.ptr[i] = v.data.list.ptr[i];
-        }
+        }*/
 
         return *this;
     }
     
     value& operator=(value&& v) {
         //clear();
-        type = v.type;
-        data = v.data;
+        data = std::move(v.data);
+        v.data = nullptr;
 
-        v.type = NONE;
-
-        if (type == STRING) puts("str moved!");
         return *this;
     }
 
-
-    void parse_string(const char* str, const char** end = nullptr) {
+    static std::string parse_string(const char* str, const char** end = nullptr) {
         char* ptr = (char*)str;
         uint32_t escape_chars = 0;
         bool slash = false;
@@ -168,11 +174,11 @@ struct value {
         }
         
         size_t size = ptr - str - 1;
+        std::string result;
 
         if (escape_chars) {
-            data.string.size = size - escape_chars;
-            ptr = data.string.ptr = new char[data.string.size];
-            data.string.copy = true;
+            result.resize(size - escape_chars);
+            ptr = result.data();
             slash = false;
 
             while (*++str != '"' || escape_chars) {
@@ -200,13 +206,13 @@ struct value {
             }
         }
         else {
-            data.string.ptr = (char*)str + 1;
-            data.string.size = size;
-            data.string.copy = false;
+            result = std::string_view{str + 1, ptr};
             str = ptr;
         }
 
         if (end != nullptr) *end = str;
+
+        return result;
     }
 
     static value _parse(const char*& str, std::function<const value*(std::string_view)> get_variable = nullptr) {
@@ -215,55 +221,54 @@ struct value {
         while (*str == ' ' || *str == '\n') ++str;
 
         if (str[0] == '"') {
-            result.type = STRING;
-            result.parse_string(str, &str);
+            result.data = parse_string(str, &str);
             ++str;
         }
         else if (str[0] == '[') {
-            result.type = LIST;
-            list_data& list = result.data.list = {nullptr, 1};
+            std::vector<value> list = {};
             
             {
                 const char* ptr = str;
+                size_t size = 1;
                 while (*++ptr != ']')
-                    if (*ptr == ',') ++list.size;
+                    if (*ptr == ',') ++size;
 
-                list.ptr = new value[list.size];
+                list.resize(size);
             }
 
             size_t init = 0;
             ++str;
             while (*str != ']') {
-                list.ptr[init] = _parse(str, get_variable);
-                if (list.ptr[init].type != NONE) ++init;
+                list[init] = _parse(str, get_variable);
+                if (list[init].type() != NONE) ++init;
                 
                 while (*str != ',' && *str != ']') ++str;
                 if (*str == ',') ++str;
             }
             ++str;
+
+            result.data = std::move(list);
+            list.clear();
         }
         else {
             char* end = (char*)str + 4;
             
             if (strncmp(str, "true", 4) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
-                result.type = BOOLEAN;
-                result.data.boolean = true;
+                result.data = true;
                 str = end;
                 return result;
             }
 
             ++end;
             if (strncmp(str, "false", 5) == 0 && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
-                result.type = BOOLEAN;
-                result.data.boolean = false;
+                result.data = false;
                 str = end;
                 return result;
             }
             
             const double num = strtod(str, &end);
             if (str != end && (*end == ']' || *end == ' ' || *end == ',' || *end == '\0' || *end == '}' || *end == '\n')) {
-                result.type = NUMBER;
-                result.data.number = num;
+                result.data = num;
                 str = end;
                 return result;
             }
@@ -322,48 +327,48 @@ struct value {
         }
 
         if (str[0] == '"') {
-            result.type = STRING;
-            result.parse_string(str, &str);
+            result.data = parse_string(str, &str);
             ++str;
         }
         else if (str[0] == '[') {
-            result.type = LIST;
-            list_data& list = result.data.list = {nullptr, 1};
+            std::vector<value> list = {};
             
             {
                 const char* ptr = str;
+                size_t size = 1;
                 while (*++ptr != ']')
-                    if (*ptr == ',') ++list.size;
+                    if (*ptr == ',') ++size;
 
-                list.ptr = new value[list.size];
+                list.resize(size);
             }
 
             size_t init = 0;
             ++str;
             while (*str != ']') {
-                list.ptr[init] = parse({str, end}, &str, get_variable);
-                if (list.ptr[init].type != NONE) ++init;
+                list[init] = parse({str, end}, &str, get_variable);
+                if (list[init].type() != NONE) ++init;
                 
                 while (*str != ',' && *str != ']') ++str;
                 if (*str == ',') ++str;
             }
             ++str;
+
+            result.data = std::move(list);
+            list.clear();
         }
         else {
             //char* end = (char*)str + 4; // TODO: range
             const char* c = str + 4;
             
             if (end - str >= 4 && strncmp(str, "true", 4) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
-                result.type = BOOLEAN;
-                result.data.boolean = true;
+                result.data = true;
                 *read_end = c;
                 return result;
             }
 
             ++c;
             if (end - str >= 5 && strncmp(str, "false", 5) == 0 && (*c == ']' || *c <= ' ' || *c == ',' || *c == '}' || *c == '\n')) {
-                result.type = BOOLEAN;
-                result.data.boolean = false;
+                result.data = false;
                 *read_end = c;
                 return result;
             }
@@ -373,16 +378,14 @@ struct value {
                 const auto [f_end, ec] = std::from_chars(str, end, num);
 
                 if (str != f_end && ec == std::errc{} && (f_end == end || *f_end == ']' || *f_end <= ' ' || *f_end == ',' || *f_end == '}')) {
-                    result.type = NUMBER;
-                    result.data.number = num;
+                    result.data = num;
                     *read_end = f_end;
                     return result;
                 }
             }
 
             c = str;
-            while (c != end && *c > ' ' && *c != ',' && *c != ']' && *c != '}') ++c; // TODO: discard terminating chars like ']' & '}' - focus on ranage instead
-            //printf("const: [%.*s]\n", (int)(end - str), str);
+            while (c < end && *c > ' ' && *c != ',' && *c != ']' && *c != '}' && *c != '.') ++c; // TODO: replace with operator set
 
             std::string_view name = {str, c};
             const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
@@ -394,87 +397,134 @@ struct value {
                 result = constants.at(name);
                 str = c;
             }
+            else c = str;
+
+            std::string s = std::string(name) + '(' + result.to_string() + ')';
+            value* ref = &result;
+            while (c < end && *c == '.' && ref->type() == OBJECT) {
+                puts("YOOOOOOOOOOOOOOOOOOOOOO");
+                const char* const begin = ++c;
+                
+                while (c < end && *c > ' ' && !modoc::operator_chars.contains(*c)) ++c;
+
+                name = {begin, c};
+                /*const */object_t& obj = ref->object();
+                auto it = obj.find(name);
+
+                s += '-';
+                s += name;
+                if (it != obj.end()) {
+                    ref = &it->second;
+                    s += '(';
+                    s += ref->to_string();
+                    s += ')';
+                }
+            }
+            result = *ref;
+            str = c;
+
+            puts(s.c_str());
+            modoc::logger::log_f("value", "parse", modoc::logger::LOG, "%s : [%s]", s.c_str(), result.to_string().c_str());
         }
 
         *read_end = str;
         return result;
     }
 
+    bool& boolean() {
+        return std::get<bool>(data);
+    }
 
     bool boolean() const {
-        return data.boolean;
+        return std::get<bool>(data);
+    }
+
+    double& number() {
+        return std::get<double>(data);
     }
 
     double number() const {
-        return data.number;
+        return std::get<double>(data);
     }
 
     std::string_view string() const {
-        return {data.string.ptr, data.string.ptr + data.string.size};
+        return std::get<std::string>(data);
     }
 
-    std::span<value> list() const {
-        return {data.list.ptr, data.list.ptr + data.list.size};
+    std::vector<value>& list() {
+        return std::get<std::vector<value>>(data);
+    }
+    
+    const std::vector<value>& list() const {
+        return std::get<std::vector<value>>(data);
+    }
+
+    object_t& object() {
+        return std::get<object_t>(data);
+    }
+
+    const object_t& object() const {
+        return std::get<object_t>(data);
     }
 
     
     // Operators
     value operator+(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return {number() + v.number()};
+        if (type() == NUMBER && v.type() == NUMBER) return {number() + v.number()};
         return *this;
     }
     value& operator+=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) data.number += v.number();
+        if (type() == NUMBER && v.type() == NUMBER) number() += v.number();
         return *this;
     }
     
     value operator-(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return {number() - v.number()};
+        if (type() == NUMBER && v.type() == NUMBER) return {number() - v.number()};
         return *this;
     }
     value& operator-=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) data.number -= v.number();
+        if (type() == NUMBER && v.type() == NUMBER) number() -= v.number();
         return *this;
     }
 
     value operator*(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return {number() * v.number()};
+        if (type() == NUMBER && v.type() == NUMBER) return {number() * v.number()};
         return *this;
     }
     value& operator*=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) data.number *= v.number();
+        if (type() == NUMBER && v.type() == NUMBER) number() *= v.number();
         return *this;
     }
 
     value operator/(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return {number() / v.number()};
+        if (type() == NUMBER && v.type() == NUMBER) return {number() / v.number()};
         return *this;
     }
     value& operator/=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) data.number /= v.number();
+        if (type() == NUMBER && v.type() == NUMBER) number() /= v.number();
         return *this;
     }
 
     value operator^(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return {std::pow(number(), v.number())};
+        if (type() == NUMBER && v.type() == NUMBER) return {std::pow(number(), v.number())};
         return *this;
     }
     value& operator^=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) data.number = std::pow(number(), v.number());
+        if (type() == NUMBER && v.type() == NUMBER) number() = std::pow(number(), v.number());
         return *this;
     }
 
     value operator==(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return value::from_boolean(number() == v.number());
+        if (type() == NUMBER && v.type() == NUMBER) return value::from_boolean(number() == v.number());
         return *this;
     }
     value operator!=(const value& v) {
-        if (type == NUMBER && v.type == NUMBER) return value::from_boolean(number() != v.number());
+        if (type() == NUMBER && v.type() == NUMBER) return value::from_boolean(number() != v.number());
         return *this;
     }
 
     std::string to_string() const {
-        switch ((uint8_t)type) {
+        switch (type()) {
             case value::BOOLEAN:
                 return (boolean() ? "true" : "false");
             case value::NUMBER:
@@ -484,7 +534,7 @@ struct value {
             case value::LIST:
                 {
                     std::string result = "[";
-                    std::span<value> s = list();
+                    std::vector<value> s = list();
                     for (size_t i = 0; i < s.size(); ++i) {
                         result += s[i].to_string();
                         if (i != s.size() - 1) result += ", ";
@@ -492,13 +542,25 @@ struct value {
                     result += ']';
                     return result;
                 }
+            case OBJECT:
+                {
+                    std::string result = "{";
+                    for (auto entry : object()) {
+                        if (result.size() > 1) result += ", ";
+                        result += entry.first;
+                        result += " : ";
+                        result += entry.second.to_string();
+                    }
+                    result += '}';
+                    return result;
+                }
         }
         return "null";
     }
 
-    ~value() {
+    /*~value() {
         clear();
-    }
+    }*/
 };
 
 static size_t parse_options(const char* ptr, options_t& ops, std::function<const value*(std::string_view)> get_variable = nullptr, const char term = ']') {
@@ -676,4 +738,5 @@ static std::string evaluate(const char* str, const char** end, std::function<con
 
 static void register_constant(std::string_view name, const value& v) {
     constants[name] = v;
+    modoc::logger::s_log("value", "register_const", constants[name].to_string());
 }

@@ -176,11 +176,8 @@ int main(int argc, char** argv) {
     register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());
 
-    register_constant("code.lang.cpp", value("cpp"));
-    register_constant("gen.mode.modoc", value((double)gen_node::MODOC));
-    register_constant("gen.mode.json", value((double)gen_node::JSON));
-
     printf("Node factories: %zu\n", node_factories.size());
+    for (auto entry : node_factories) entry.second->init();
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);

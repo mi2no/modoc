@@ -41,106 +41,108 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
 
         //printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
         node* n = node_factories.at(nt.node_name.view())->instance(depth, map);
-       
-        {
-            std::string_view meta = nt.meta.view();
-            if (meta.size()) {
-                map.clear();
-                parse_options(meta, map, get_var_func);
-                //for (auto& e : map)
-                //    printf("{%.*s : %s}\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
-                n->add_meta(map);
-            }
-        }
 
-        // Handling the first child text node
-        if (n->scope_end() != scope_end::START && nt.children.size() && nt.children.front().is_text()) {
-            modoc::string_type& str = nt.children.front().text();
-            const std::string_view view = str.view();
-            const char* end;
-
-            switch (n->scope_end()) {
-                case scope_end::ENDL:
-                    end = view.data();
-                    while (*end != '\n' && end != view.end()) ++end; // Move to endl or end of text
-                    break;
-                case scope_end::ENDSCP:
-                    end = view.end(); 
+        if (n != nullptr) {
+            {
+                std::string_view meta = nt.meta.view();
+                if (meta.size()) {
+                    map.clear();
+                    parse_options(meta, map, get_var_func);
+                    //for (auto& e : map)
+                    //    printf("{%.*s : %s}\n", (int)e.first.size(), e.first.data(), e.second.to_string().c_str());
+                    n->add_meta(map);
+                }
             }
 
-            if (n->verbatim()) n->parse_verbatim({view.begin(), end}, copy_text);
-            else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
+            // Handling the first child text node
+            if (n->scope_end() != scope_end::START && nt.children.size() && nt.children.front().is_text()) {
+                modoc::string_type& str = nt.children.front().text();
+                const std::string_view view = str.view();
+                const char* end;
 
-            while (end < view.end() && (*end == ' ' || *end == '\n' || *end == '\t')) ++end; // Skip invalid chars
+                switch (n->scope_end()) {
+                    case scope_end::ENDL:
+                        end = view.data();
+                        while (*end != '\n' && end != view.end()) ++end; // Move to endl or end of text
+                        break;
+                    case scope_end::ENDSCP:
+                        end = view.end(); 
+                }
 
-            if (end < view.end()) {
-                str.remove_prefix(end - view.begin()); // Move begin to end
-                //printf("remaining: [%.*s]\n", (int)str.view().size(), str.view().data());
+                if (n->verbatim()) n->parse_verbatim({view.begin(), end}, copy_text);
+                else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
+
+                while (end < view.end() && (*end == ' ' || *end == '\n' || *end == '\t')) ++end; // Skip invalid chars
+
+                if (end < view.end()) {
+                    str.remove_prefix(end - view.begin()); // Move begin to end
+                    //printf("remaining: [%.*s]\n", (int)str.view().size(), str.view().data());
+                }
+                else {
+                    nt.children.erase(nt.children.begin()); // Remove text node
+                    //puts("<erased>");
+                }
+            }
+
+            if (n->is_primitive()) {
+                if (nt.children.size()) {
+                    modoc::tree initialized = std::move(initialize(&tree, nt.children, depth + 1, copy_text));
+                    
+                    /*for (node* child : initialized.nodes) n->add_node(child);
+                    initialized.nodes.clear();*/
+
+                    modoc::tree* n_subtree = n->subtree();
+                    if (n_subtree != nullptr) {
+                        n_subtree->combine(std::move(initialized));
+                        initialized.clear();
+                    }
+                }
+
+                //printf("Initialized primitive [%s]\n", n->type());
+                //fflush(stdout);
+
+                /*tree.nodes.push_back(n);
+                for (auto entry : tree.variables) {
+                    value v = entry.second.top().v;
+                    tree.assign(entry.first, std::move(v));
+                }*/
+
+
+                //return {n};
+                result.insert_node(n);
             }
             else {
-                nt.children.erase(nt.children.begin()); // Remove text node
-                //puts("<erased>");
-            }
-        }
+                std::vector<uninitialized_tree::unode> expanded = ((special_node*)n)->expand(tree);
+                //printf("Initialized special [%s]\n", n->type());
+                //fflush(stdout);
+                delete n;
 
-        if (n->is_primitive()) {
-            if (nt.children.size()) {
-                modoc::tree initialized = std::move(initialize(&tree, nt.children, depth + 1, copy_text));
+                modoc::logger log;
+
+                paste_children(expanded, nt.children);
                 
-                /*for (node* child : initialized.nodes) n->add_node(child);
-                initialized.nodes.clear();*/
+                log.log("modoc", "expand-children", std::to_string(nt.children.size()));
+                log.log("modoc", "paste", modoc::uninitialized_tree::to_string(expanded));
+                
+                modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true));
+                
+                log.log("modoc", "expand", initialized.to_string());
+                /*std::vector<node*> result = std::move(initialized.nodes);
+                initialized.nodes.clear();
 
-                modoc::tree* n_subtree = n->subtree();
-                if (n_subtree != nullptr) {
-                    n_subtree->combine(std::move(initialized));
-                    initialized.clear();
+                const uint32_t off = tree.nodes.size();
+                for (auto& entry : initialized.variables) {
+                    auto stack = entry.second;
+
+                    while (stack.size()) {
+                        tree._assign_at(entry.first, std::move(stack.top().v), off + stack.top().begin_ind);
+                        stack.pop();
+                    }
                 }
+
+                return result;*/
+                result.combine(std::move(initialized));
             }
-
-            //printf("Initialized primitive [%s]\n", n->type());
-            //fflush(stdout);
-
-            /*tree.nodes.push_back(n);
-            for (auto entry : tree.variables) {
-                value v = entry.second.top().v;
-                tree.assign(entry.first, std::move(v));
-            }*/
-
-
-            //return {n};
-            result.insert_node(n);
-        }
-        else {
-            std::vector<uninitialized_tree::unode> expanded = ((special_node*)n)->expand(tree);
-            //printf("Initialized special [%s]\n", n->type());
-            //fflush(stdout);
-            delete n;
-
-            modoc::logger log;
-
-            paste_children(expanded, nt.children);
-            
-            log.log("modoc", "expand-children", std::to_string(nt.children.size()));
-            log.log("modoc", "paste", modoc::uninitialized_tree::to_string(expanded));
-            
-            modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true));
-            
-            log.log("modoc", "expand", initialized.to_string());
-            /*std::vector<node*> result = std::move(initialized.nodes);
-            initialized.nodes.clear();
-
-            const uint32_t off = tree.nodes.size();
-            for (auto& entry : initialized.variables) {
-                auto stack = entry.second;
-
-                while (stack.size()) {
-                    tree._assign_at(entry.first, std::move(stack.top().v), off + stack.top().begin_ind);
-                    stack.pop();
-                }
-            }
-
-            return result;*/
-            result.combine(std::move(initialized));
         }
     }
     else result.insert_node(new text_node(tokenize(un.text().view(), get_var_func, copy_text))); // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
