@@ -91,9 +91,11 @@ struct value {
         return result;
     }
 
-    /*static value from_function(std::function<value(std::map<std::string, value>)> func) {
-
-    }*/
+    static value from_function(function_t func) {
+        value result;
+        result.data = func;
+        return result;
+    }
 
     static value from_object(object_t&& map) {
         value result;
@@ -385,30 +387,32 @@ struct value {
             }
 
             c = str;
-            while (c < end && *c > ' ' && *c != ',' && *c != ']' && *c != '}' && *c != '.') ++c; // TODO: replace with operator set
+            while (c < end && *c > ' ' && !modoc::operator_chars.contains(*c)/**c != ',' && *c != ']' && *c != '}' && *c != '.'*/) ++c; // TODO: replace with operator set
 
             std::string_view name = {str, c};
-            const value* v = get_variable != nullptr ? get_variable(name) : nullptr;
-            if (v != nullptr) {
-                result = *v;
+            const value* ref = get_variable != nullptr ? get_variable(name) : nullptr;
+            if (ref != nullptr) {
+                //result = *v;
                 str = c;
             }
             else if (constants.contains(name)) {
-                result = constants.at(name);
+                ref = &constants.at(name);
                 str = c;
             }
-            else c = str;
+            else {
+                c = str;
+                modoc::logger::s_log("value", "parse", std::string(name) + " Not found!!!", modoc::logger::ERR);
+                return value::null();
+            }
 
-            std::string s = std::string(name) + '(' + result.to_string() + ')';
-            value* ref = &result;
+            std::string s = std::string(name) + '(' + ref->to_string() + ')';
             while (c < end && *c == '.' && ref->type() == OBJECT) {
-                puts("YOOOOOOOOOOOOOOOOOOOOOO");
                 const char* const begin = ++c;
                 
                 while (c < end && *c > ' ' && !modoc::operator_chars.contains(*c)) ++c;
 
                 name = {begin, c};
-                /*const */object_t& obj = ref->object();
+                const object_t& obj = ref->object();
                 auto it = obj.find(name);
 
                 s += '-';
@@ -423,8 +427,7 @@ struct value {
             result = *ref;
             str = c;
 
-            puts(s.c_str());
-            modoc::logger::log_f("value", "parse", modoc::logger::LOG, "%s : [%s]", s.c_str(), result.to_string().c_str());
+            modoc::logger::s_log("value", "parse", s, modoc::logger::DBG);
         }
 
         *read_end = str;

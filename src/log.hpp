@@ -19,7 +19,7 @@ namespace modoc {
         uint16_t width = 30;
 
         enum type_t : uint8_t {
-            LOG, ERR, WARN
+            LOG, ERR, WRN, DBG
         };
 
         static constexpr const char* LINE_VERTICAL = "\u2502";
@@ -94,12 +94,22 @@ namespace modoc {
             return result;
         }
 
-    public:
+        static std::tuple<std::string_view, std::string_view> type_color(type_t type) {
+            switch (type) {
+                case LOG: return {"LOG", "\033[32m"};
+                case ERR: return {"ERR", "\033[31m"};
+                case DBG: return {"DBG", "\033[2m"};
+                case WRN: return {"WRN", "\033[33m"};
+            }
+            return {"IDK", ""};
+        }
 
+    public:
+        
         static std::string to_string(std::string_view context, std::string_view title, std::string_view content, uint16_t width, type_t type = LOG) {
             std::string result;
 
-            const std::string color = type == LOG ? "\033[32m" : "\033[31m";
+            const auto [type_str, color] = type_color(type);
 
             { // name frame ╭───────────────────────╮
                 const uint16_t frame_width = std::min((size_t)width - 2, context.size() + title.size() + 3 /*type*/ + 3 /*spacer*/ + 2 /*frame*/ + 2 /*padding*/ + 3 /* . */);
@@ -128,7 +138,7 @@ namespace modoc {
                 result += " | ";
                 result += "\033[0m";
                 result += "\033[1m";
-                result += "LOG";
+                result += type_str; 
                 result += "\033[0m";
                 result += ' ';
                 result += color;
