@@ -130,6 +130,10 @@ struct new_code_f : node_factory {
             obj.object()["lang"] = std::move(lang);
         }
 
+        obj.object()["test"] = value::from_function([](const value::object_t& obj) -> value {
+            return 1.2;
+        });
+
         register_constant("code", obj);
     }
 

@@ -79,7 +79,7 @@ struct node {
 };
 
 struct node_factory {
-    virtual void init() {};
+    virtual void init() {}; // TODO: remove
     virtual node* instance(uint8_t nesting, const options_t&) = 0;
     virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
     virtual void set_node_type_id(uint32_t) const = 0;

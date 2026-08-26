@@ -28,6 +28,8 @@ static std::unordered_map<std::string_view, value> constants;
 
 typedef std::map<std::string_view, value> options_t;
 
+static void parse_options(std::string_view view, options_t& ops, std::function<const value*(std::string_view)> get_variable);
+
 struct value {
 
     enum type_e : uint8_t {
@@ -55,7 +57,7 @@ struct value {
     } data;*/
 
     using object_t = std::map<std::string, value, std::less<>>;
-    using function_t = std::function<value(object_t)>;
+    using function_t = std::function<value(const object_t&)>;
 
     using value_type = std::variant<
         std::nullptr_t,
@@ -140,7 +142,7 @@ struct value {
 
     value& operator=(const value& v) {
         //clear();
-        data = v.data;
+        if (&v != this) data = v.data;
         
         /*if (type == STRING && data.string.copy) {
             data.string.ptr = new char[data.string.size];
@@ -156,11 +158,59 @@ struct value {
     
     value& operator=(value&& v) {
         //clear();
-        data = std::move(v.data);
-        v.data = nullptr;
+        if (&v != this) {
+            data = std::move(v.data);
+            v.data = nullptr;
+        }
 
         return *this;
     }
+
+
+    bool& boolean() {
+        return std::get<bool>(data);
+    }
+
+    bool boolean() const {
+        return std::get<bool>(data);
+    }
+
+    double& number() {
+        return std::get<double>(data);
+    }
+
+    double number() const {
+        return std::get<double>(data);
+    }
+
+    std::string_view string() const {
+        return std::get<std::string>(data);
+    }
+
+    std::vector<value>& list() {
+        return std::get<std::vector<value>>(data);
+    }
+    
+    const std::vector<value>& list() const {
+        return std::get<std::vector<value>>(data);
+    }
+
+    object_t& object() {
+        return std::get<object_t>(data);
+    }
+
+    const object_t& object() const {
+        return std::get<object_t>(data);
+    }
+
+    function_t& function() {
+        return std::get<function_t>(data);
+    }
+
+    const function_t& function() const {
+        return std::get<function_t>(data);
+    }
+
 
     static std::string parse_string(const char* str, const char** end = nullptr) {
         char* ptr = (char*)str;
@@ -406,25 +456,48 @@ struct value {
             }
 
             std::string s = std::string(name) + '(' + ref->to_string() + ')';
-            while (c < end && *c == '.' && ref->type() == OBJECT) {
-                const char* const begin = ++c;
-                
-                while (c < end && *c > ' ' && !modoc::operator_chars.contains(*c)) ++c;
 
-                name = {begin, c};
-                const object_t& obj = ref->object();
-                auto it = obj.find(name);
+            while (c < end) {
+                if (*c == '.' && ref->type() == OBJECT) {
+                    const char* const begin = ++c;
+                    
+                    while (c < end && *c > ' ' && !modoc::operator_chars.contains(*c)) ++c;
 
-                s += '-';
-                s += name;
-                if (it != obj.end()) {
-                    ref = &it->second;
-                    s += '(';
-                    s += ref->to_string();
-                    s += ')';
+                    name = {begin, c};
+                    const object_t& obj = ref->object();
+                    auto it = obj.find(name);
+
+                    s += '-';
+                    s += name;
+                    if (it != obj.end()) {
+                        ref = &it->second;
+                        s += '(';
+                        s += ref->to_string();
+                        s += ')';
+                    }
                 }
+                else if (*c == '(' && ref->type() == FUNCTION) {
+                    const std::string_view scope = modoc::get_scope({c, end}, '(', ')');
+                    
+                    if (scope.end() >= end) {
+                        // err
+                        return value::null();
+                    }
+                    
+                    options_t map;
+                    parse_options(scope, map, get_variable);
+
+                    object_t obj_map;
+                    for (auto entry : map) obj_map[std::string(entry.first)] = std::move(entry.second);
+
+                    result = ref->function()(obj_map);
+                    
+                    ref = &result;
+                    c += scope.size() + 2;
+                }
+                else break;
             }
-            result = *ref;
+            if (ref != &result) result = *ref;
             str = c;
 
             modoc::logger::s_log("value", "parse", s, modoc::logger::DBG);
@@ -432,42 +505,6 @@ struct value {
 
         *read_end = str;
         return result;
-    }
-
-    bool& boolean() {
-        return std::get<bool>(data);
-    }
-
-    bool boolean() const {
-        return std::get<bool>(data);
-    }
-
-    double& number() {
-        return std::get<double>(data);
-    }
-
-    double number() const {
-        return std::get<double>(data);
-    }
-
-    std::string_view string() const {
-        return std::get<std::string>(data);
-    }
-
-    std::vector<value>& list() {
-        return std::get<std::vector<value>>(data);
-    }
-    
-    const std::vector<value>& list() const {
-        return std::get<std::vector<value>>(data);
-    }
-
-    object_t& object() {
-        return std::get<object_t>(data);
-    }
-
-    const object_t& object() const {
-        return std::get<object_t>(data);
     }
 
     
@@ -557,6 +594,7 @@ struct value {
                     result += '}';
                     return result;
                 }
+            case FUNCTION: return "function";
         }
         return "null";
     }
