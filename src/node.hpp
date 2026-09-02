@@ -13,7 +13,7 @@
 #include "tree.hpp"
 #include "value.hpp"
 
-#include "../../serialize/serialize.hpp"
+#include "serialize/serialize.hpp"
 
 enum scope_end : uint8_t {
     START, ENDL, ENDSCP

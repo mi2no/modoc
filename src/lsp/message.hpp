@@ -7,7 +7,7 @@
 
 #include <iostream>
 
-#include "../../../teams_cli/serialize.hpp"
+#include "../serialize/serialize.hpp"
 #include "log.hpp"
 
 namespace msg {

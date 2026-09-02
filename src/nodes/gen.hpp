@@ -11,7 +11,7 @@
 #include "../tree.hpp"
 #include "../log.hpp"
 
-#include "../../../serialize/serialize.hpp"
+#include "../serialize/serialize.hpp"
 
 struct gen_node : special_node {
     inline static uint32_t t_id;
