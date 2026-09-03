@@ -11,7 +11,7 @@
 #include "../tree.hpp"
 #include "../log.hpp"
 
-#include "../../../serialize/serialize.hpp"
+#include "../serialize/serialize.hpp"
 
 struct gen_node : special_node {
     inline static uint32_t t_id;
@@ -183,10 +183,24 @@ public:
 };
 
 struct gen_f : node_factory {
+    void init() override {
+        value obj = value::from_object({});
+
+        { // mode
+            value mode = value::from_object({});
+            mode.object()["modoc"] = std::move(value((double)gen_node::MODOC));
+            mode.object()["json"] = gen_node::JSON;
+
+            obj.object()["mode"] = std::move(mode);
+        }
+
+        register_constant("gen", obj);
+    }
+
     node* instance(uint8_t depth, const options_t& op) override {
         if (op.contains("mode")) {
             const value v = op.at("mode");
-            if (v.type == value::NUMBER) return new gen_node(depth, op.at("cmd").string(), v.number());
+            if (v.type() == value::NUMBER) return new gen_node(depth, op.at("cmd").string(), v.number());
         }
         return nullptr;
     }

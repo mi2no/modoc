@@ -89,7 +89,7 @@ struct assign_f : node_factory {
         bool overwrite = false;
         if (op.contains("overwrite")) {
             const value& v = op.at("overwrite");
-            if (v.type == value::BOOLEAN) overwrite = v.boolean();
+            if (v.type() == value::BOOLEAN) overwrite = v.boolean();
         }
         return new assign_node(overwrite);
     }

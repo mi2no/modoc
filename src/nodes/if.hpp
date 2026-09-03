@@ -58,7 +58,7 @@ struct if_f : node_factory {
         bool b_value = false;
         if (op.contains("clause")) {
             const value v = op.at("clause");
-            if (v.type == value::BOOLEAN) b_value = v.boolean();
+            if (v.type() == value::BOOLEAN) b_value = v.boolean();
         }
         return new if_node(b_value);
     }

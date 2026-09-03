@@ -26,6 +26,7 @@
 #include "nodes/code.hpp"
 #include "nodes/assign.hpp"
 #include "nodes/if.hpp"
+#include "nodes/math.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -176,11 +177,10 @@ int main(int argc, char** argv) {
     register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());
 
-    register_constant("code.lang.cpp", {"cpp"});
-    register_constant("gen.mode.modoc", {gen_node::MODOC});
-    register_constant("gen.mode.json", {gen_node::JSON});
+    register_node_factory("math", new math_f());
 
     printf("Node factories: %zu\n", node_factories.size());
+    for (auto entry : node_factories) entry.second->init();
 
     FILE* file = fopen(argv[1], "r");
     fseek(file, SEEK_SET, SEEK_END);

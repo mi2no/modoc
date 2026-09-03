@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-#include "../../../teams_cli/serialize.hpp"
+#include "../serialize/serialize.hpp"
 
 struct text_document {
     std::string version;

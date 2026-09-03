@@ -48,7 +48,18 @@ namespace modoc {
             }
             else if (token == nullptr) {
                 if (*itr == EVALUATE_CHAR) {
-                    tokens.emplace_back(evaluate(itr + 1, &itr, get_variable), true);
+                    value v;
+
+                    ++itr;
+                    if (*itr == '(') {
+                        std::string_view scope = modoc::get_scope(itr, '(', ')');
+                        v = calc(scope, get_variable);
+                        itr += scope.size() + 1;
+                    }
+                    else v = value::parse({itr, str.end()}, &itr, get_variable);
+                    
+                    tokens.emplace_back(v.to_string(), true);
+                    //tokens.emplace_back(evaluate(itr + 1, &itr, get_variable), true);
                     //printf("off: %zu\nend: %d\n", str.end() - itr, (int)*str.end());
                 }
                 else if (*itr != ' ' && *itr != '\t' && *itr != '\n') token = itr;   

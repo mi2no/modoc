@@ -19,7 +19,7 @@ namespace modoc {
         uint16_t width = 30;
 
         enum type_t : uint8_t {
-            LOG, ERR, WARN
+            LOG, ERR, WRN, DBG
         };
 
         static constexpr const char* LINE_VERTICAL = "\u2502";
@@ -94,12 +94,22 @@ namespace modoc {
             return result;
         }
 
-    public:
+        static std::tuple<std::string_view, std::string_view> type_color(type_t type) {
+            switch (type) {
+                case LOG: return {"LOG", "\033[32m"};
+                case ERR: return {"ERR", "\033[31m"};
+                case DBG: return {"DBG", "\033[2m"};
+                case WRN: return {"WRN", "\033[33m"};
+            }
+            return {"IDK", ""};
+        }
 
-        std::string to_string(std::string_view context, std::string_view title, std::string_view content, type_t type = LOG) const {
+    public:
+        
+        static std::string to_string(std::string_view context, std::string_view title, std::string_view content, uint16_t width, type_t type = LOG) {
             std::string result;
 
-            const std::string color = type == LOG ? "\033[32m" : "\033[31m";
+            const auto [type_str, color] = type_color(type);
 
             { // name frame ╭───────────────────────╮
                 const uint16_t frame_width = std::min((size_t)width - 2, context.size() + title.size() + 3 /*type*/ + 3 /*spacer*/ + 2 /*frame*/ + 2 /*padding*/ + 3 /* . */);
@@ -128,7 +138,7 @@ namespace modoc {
                 result += " | ";
                 result += "\033[0m";
                 result += "\033[1m";
-                result += "LOG";
+                result += type_str; 
                 result += "\033[0m";
                 result += ' ';
                 result += color;
@@ -203,8 +213,26 @@ namespace modoc {
             fputs(CORNER_ROUND_BOTTOM_LEFT, out);
             for (uint16_t i = 0; i < width - 2; ++i) fputs(LINE_HORIZONTAL, out);
             fputs(CORNER_ROUND_BOTTOM_RIGHT, out);*/
-            std::string result = to_string(context, title, content);
+            std::string result = to_string(context, title, content, width, type);
             fputs(result.c_str(), out);
+        }
+
+        static void s_log(std::string_view context, std::string_view title, std::string_view content, type_t type = LOG, uint16_t width = 100) {
+            std::string result = to_string(context, title, content, 100, type);
+            fputs(result.c_str(), stdout);
+        }
+
+        template <typename... T>
+        static void log_f(std::string_view context, std::string_view title, type_t type, std::string_view format, T... args) {
+            size_t size = snprintf(nullptr, 0, format.data(), args...);
+            char* buff = new char[size];
+            snprintf(buff, size, format.data(), args...);
+            
+            std::string_view content = {buff, buff + size};
+            std::string result = to_string(context, title, content, 100);
+            fputs(result.c_str(), stdout);
+
+            delete[] buff;
         }
     };
 }
