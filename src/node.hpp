@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 //#include "options.hpp"
+#include "log.hpp"
 #include "string_type.hpp"
 #include "tree.hpp"
 #include "value.hpp"
@@ -454,6 +455,7 @@ struct code_node : node {
         token_type type = NONE;
     };
 
+    std::string content;
     std::vector<token_t> tokens{};
     std::string lang;
 
@@ -494,6 +496,11 @@ struct code_node : node {
 
             tokens.push_back(t);
         }
+    }
+    
+    void parse_verbatim(std::string_view str, bool to_copy) override {
+        modoc::logger::s_log("code", "verbatim", str);
+        content = str;
     }
 
     /*virtual void debug_print() const override {

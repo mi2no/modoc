@@ -2,6 +2,7 @@
 #include "log.hpp"
 #include "node.hpp"
 #include "uninitialized_tree.hpp"
+#include "util.hpp"
 #include "value.hpp"
 #include <string>
 
@@ -69,7 +70,11 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
                         end = view.end(); 
                 }
 
-                if (n->verbatim()) n->parse_verbatim({view.begin(), end}, copy_text);
+                if (n->verbatim()) {
+                    //n->parse_verbatim({view.begin(), end}, copy_text);
+                    std::string no_indent = modoc::remove_indent({view.begin(), end}, depth + 1);
+                    n->parse_verbatim(no_indent, true);
+                }
                 else n->parse_tokens(tokenize({view.begin(), end}, get_var_func), 0);
 
                 while (end < view.end() && (*end == ' ' || *end == '\n' || *end == '\t')) ++end; // Skip invalid chars
