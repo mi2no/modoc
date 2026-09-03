@@ -53,4 +53,10 @@ namespace modoc {
 
         return result;
     }
+
+    static consteval size_t string_len(const char* str) {
+        size_t size = 0;
+        while (str[size] != '\0') ++size;
+        return size;
+    }
 };
