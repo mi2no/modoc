@@ -499,8 +499,8 @@ struct code_node : node {
     }
 
     static std::vector<token_t> tokenize(std::string_view str) {
-        static const std::unordered_set<std::string_view> types {"char", "short", "int", "long"};
-        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw"};
+        static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "uint16_t"};
+        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for"};
 
         std::vector<token_t> result;
         const char* begin = nullptr;
