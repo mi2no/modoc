@@ -451,7 +451,7 @@ struct code_node : node {
     };
 
     struct token_t {
-        std::string str;
+        std::string_view str;
         token_type type = NONE;
     };
 
@@ -475,7 +475,7 @@ struct code_node : node {
     }
 
     void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
-        static const std::unordered_set<std::string> types {"char", "short", "int", "long"};
+        /*static const std::unordered_set<std::string> types {"char", "short", "int", "long"};
         static const std::unordered_set<std::string> keywords {"if", "else", "return", "throw"};
 
 
@@ -495,12 +495,57 @@ struct code_node : node {
             else if (keywords.contains(t.str)) t.type = KEYWORD;
 
             tokens.push_back(t);
+        }*/
+    }
+
+    static std::vector<token_t> tokenize(std::string_view str) {
+        static const std::unordered_set<std::string_view> types {"char", "short", "int", "long"};
+        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw"};
+
+        std::vector<token_t> result;
+        const char* begin = nullptr;
+
+        for (const char* ptr = str.data(); ptr < str.end(); ++ptr) {
+            if (begin == nullptr && *ptr > ' ') begin = ptr;
+            else if (begin != nullptr && *ptr <= ' ') {
+                const std::string_view view = {begin, ptr};
+
+                if (types.contains(view)) result.emplace_back(view, TYPE);
+                else if (keywords.contains(view)) result.emplace_back(view, KEYWORD);
+                else result.emplace_back(view, NONE);
+
+                begin = nullptr;
+            }
+
+            if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL);
         }
+
+        if (begin != nullptr) {
+            const std::string_view view = {begin, str.end()};
+
+            if (types.contains(view)) result.emplace_back(view, TYPE);
+            else if (keywords.contains(view)) result.emplace_back(view, KEYWORD);
+            else result.emplace_back(view, NONE);
+        }
+
+        return result;
     }
     
     void parse_verbatim(std::string_view str, bool to_copy) override {
         modoc::logger::s_log("code", "verbatim", str);
         content = str;
+
+        tokens = tokenize(content);
+        
+        std::string result;
+        for (auto& t : tokens) {
+            result += '(';
+            result += t.str;
+            result += ", ";
+            result += std::to_string(t.type);
+            result += ')';
+        }
+        modoc::logger::s_log("code", "verbatim", result);
     }
 
     /*virtual void debug_print() const override {
