@@ -7,6 +7,7 @@
 #include <string_view>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <map>
 
 #include "serialize/serialize.hpp"
 
@@ -45,6 +46,9 @@ namespace modoc {
 
         int to_lsp[2];
         int from_lsp[2];
+
+        std::vector<std::string> token_types, token_modifiers;
+        std::map<std::string, std::string, std::less<>> docs;
 
         void write_all(int fd, std::string_view str) {
             const char* data = str.data();
@@ -132,7 +136,21 @@ namespace modoc {
                 close(from_lsp[1]);
 
                 send(json_initialize);
-                receive();
+                std::string msg = receive();
+
+                puts(json::pretty(msg.c_str()).c_str());
+                {
+                    ssize_t idx = msg.find("legend");
+
+                    if (idx != std::string::npos) {
+                        const char* ptr = msg.data() + idx;
+                        while (*ptr != '{') ++ptr;
+
+                        token_types = json::deserialize_field<std::vector<std::string>>(ptr, "tokenTypes");
+                        token_modifiers = json::deserialize_field<std::vector<std::string>>(ptr, "tokenModifiers");
+                    }
+                }
+                
                 send(json_initialized);
             }
         }
@@ -167,6 +185,8 @@ namespace modoc {
             std::string result = std::string(json_did_open) +  json::serialize_struct(info) + "}}";
             puts(json::pretty(result.c_str()).c_str());
 
+            docs[std::string(info.uri)] = info.text;
+
             send(result);
         }
 
@@ -185,7 +205,13 @@ namespace modoc {
             send(msg);
         }
         
-        std::string request_tokens(std::string_view uri) {
+        struct token {
+            std::string_view str;
+            uint16_t type_id;
+            uint32_t modifiers;
+        };
+
+        std::vector<token> request_tokens(std::string_view uri) {
             static constexpr std::string_view json_semantic =  
                 "{\
                     \"jsonrpc\": \"2.0\",\
@@ -201,7 +227,40 @@ namespace modoc {
 
             send(msg);
             receive();
-            return receive();
+            
+            std::string token_msg = receive();
+            puts(json::pretty(token_msg.c_str()).c_str());
+
+            const ssize_t idx = token_msg.find("data");
+
+            if (idx == std::string::npos) return {};
+
+            const char* ptr = token_msg.data() + idx;
+            while (*ptr != '[') ++ptr;
+
+            std::vector<uint32_t> nums = {};
+            json::deserialize_value(nums, ptr);
+
+            ptr = docs.find(uri)->second.data();
+            token t;
+            std::vector<token> tokens;
+            for (size_t i = 0; i < nums.size();) {
+                {
+                    uint32_t delta_lines = nums[i++];
+                    while (delta_lines)
+                        if (*ptr++ == '\n') --delta_lines;
+                }
+                {
+                    uint32_t delta_cols = nums[i++];
+                    ptr += delta_cols;
+                }
+                t.str = {ptr, ptr + nums[i++]};
+                t.type_id = nums[i++];
+                t.modifiers = nums[i++];
+                tokens.push_back(t);
+            }
+
+            return tokens;
         }
     };
 }

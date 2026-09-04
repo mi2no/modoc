@@ -128,8 +128,9 @@ namespace json {
 
             if (esc_chars) {
                 const char* begin = value.data();
+                const char* const end = value.data() + value.size();
 
-                for (const char* ptr = begin; ptr < value.end(); ++ptr) {
+                for (const char* ptr = begin; ptr < end; ++ptr) {
                     if (*ptr < ' ') {
                         result += std::string_view{begin, ptr};
                        
@@ -139,7 +140,7 @@ namespace json {
                         begin = ptr + 1;
                     }
                 }
-                if (begin < value.end()) result += std::string_view{begin, value.end()};
+                if (begin < end) result += std::string_view{begin, end};
             }
             else result += value;
 
@@ -266,7 +267,7 @@ namespace json {
 
                     //printf("%c\n", *begin);
 
-                    if (*begin == ']') --depth;
+                    if (*ptr == ']') --depth;
 
                     if (begin != ptr) a.push_back(result);
 
@@ -381,7 +382,7 @@ namespace json {
 
         while (*json != '}' && *json != '\0') {
             while (*json++ != '"');
-            
+           
             const char* ptr = name;
             while (*json != '"' && *ptr != '\0') {
                 if (*json != *ptr) break;
@@ -396,6 +397,8 @@ namespace json {
                 break;
             }
             else while (*json != '"') ++json;
+
+            ++json;
 
             while (*json == ' ' || *json == ':') ++json; // TODO replace later with json character set (", [, t, f, num)
             //printf("V %c\n", *json);
