@@ -8,15 +8,43 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
+#include "serialize/serialize.hpp"
+
 namespace modoc {
     struct lsp_process {
+
+        static constexpr std::string_view json_initialize = 
+        "{\
+            \"jsonrpc\": \"2.0\",\
+            \"id\": 1,\
+            \"method\": \"initialize\",\
+            \"params\": {\
+                \"processId\": null,\
+                \"rootUri\": null,\
+                \"capabilities\": {\
+                    \"textDocument\": {\
+                        \"semanticTokens\": {\
+                            \"requests\": {\
+                                \"full\": true\
+                            }\
+                        }\
+                    }\
+                }\
+            }\
+        }";
+
+        static constexpr std::string_view json_initialized = 
+        "{\
+            \"jsonrpc\": \"2.0\",\
+            \"method\": \"initialized\",\
+            \"params\": {}\
+        }";
+
         std::string name;
         pid_t pid;
 
         int to_lsp[2];
         int from_lsp[2];
-
-        lsp_process(std::string_view name) : name(name) {}
 
         void write_all(int fd, std::string_view str) {
             const char* data = str.data();
@@ -79,7 +107,9 @@ namespace modoc {
         }
 
 
-        void init() {
+        void init(std::string_view lsp_name) {
+            name = lsp_name;
+
             pipe(to_lsp);
             pipe(from_lsp);
 
@@ -101,9 +131,9 @@ namespace modoc {
                 close(to_lsp[0]);
                 close(from_lsp[1]);
 
-                static std::string_view json_init = "{\"jsonrpc\": \"2.0\",\"id\": 1,\"method\": \"initialize\",\"params\": {}}";
-                send(json_init);
+                send(json_initialize);
                 receive();
+                send(json_initialized);
             }
         }
 
@@ -119,5 +149,70 @@ namespace modoc {
             close(from_lsp[0]);
             waitpid(pid, nullptr, 0);
         }
+
+        
+        struct txt_doc_info {
+            std::string_view uri, language_id, text;
+            uint32_t version;
+        };
+
+        void open_document(txt_doc_info info) {
+            static constexpr std::string_view json_did_open = 
+"{\
+\"jsonrpc\": \"2.0\",\
+\"method\": \"textDocument/didOpen\",\
+\"params\": {\
+\"textDocument\":";
+
+            std::string result = std::string(json_did_open) +  json::serialize_struct(info) + "}}";
+            puts(json::pretty(result.c_str()).c_str());
+
+            send(result);
+        }
+
+        void close_document(std::string_view uri) {
+            static constexpr std::string_view json_did_close = 
+"{\
+\"jsonrpc\": \"2.0\",\
+\"method\": \"textDocument/didClose\",\
+\"params\": {\
+\"textDocument\": {\
+\"uri\": \"";
+
+            std::string msg = std::string(json_did_close);
+            msg += uri;
+            msg += "\"}}}";
+            send(msg);
+        }
+        
+        std::string request_tokens(std::string_view uri) {
+            static constexpr std::string_view json_semantic =  
+                "{\
+                    \"jsonrpc\": \"2.0\",\
+                    \"id\": 2,\
+                    \"method\": \"textDocument/semanticTokens/full\",\
+                    \"params\": {\
+                        \"textDocument\": {\
+                            \"uri\":\"";
+            
+            std::string msg = std::string(json_semantic);
+            msg += uri;
+            msg += "\"}}}";
+
+            send(msg);
+            receive();
+            return receive();
+        }
     };
 }
+
+template <>
+struct serializer<modoc::lsp_process::txt_doc_info> {
+    using self = modoc::lsp_process::txt_doc_info;
+    using fields = field_list<
+        AUTO_FIELD(uri),
+        AUTO_FIELD(text),
+        AUTO_FIELD(version),
+        field<&self::language_id, "languageId">
+    >;
+};

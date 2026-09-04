@@ -1,6 +1,8 @@
 #pragma once
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <string_view>
 #include <type_traits>
 #include <cstddef>
@@ -114,9 +116,33 @@ namespace json {
     template <typename T>
     static std::string serialize_value(const T& value) {
         std::string result = "";
-        if constexpr (std::is_same_v<T, std::string>) {
+        if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
             result += '"';
-            result += value;
+
+            bool esc_chars = false;
+            for (char c : value) 
+                if (c == '\n' || c == '\t') {
+                    esc_chars = true;
+                    break;
+                }
+
+            if (esc_chars) {
+                const char* begin = value.data();
+
+                for (const char* ptr = begin; ptr < value.end(); ++ptr) {
+                    if (*ptr < ' ') {
+                        result += std::string_view{begin, ptr};
+                       
+                        if (*ptr == '\n') result += "\\n";
+                        else if (*ptr == '\t') result += "\\t";
+
+                        begin = ptr + 1;
+                    }
+                }
+                if (begin < value.end()) result += std::string_view{begin, value.end()};
+            }
+            else result += value;
+
             result += '"';
         }
         else if constexpr (std::is_same_v<T, bool>) {
@@ -527,5 +553,111 @@ namespace json {
             ++json;
         }
         putchar('\n');
+    }
+
+
+    static std::string pretty(const char* json) {
+        bool indent = false;
+        uint8_t object_depth = 0;
+
+        enum : uint8_t {
+            LIST, OBJ
+        };
+        std::stack<uint8_t> in;
+
+        std::string result;
+        
+        while (*json != '\0') { 
+            if (*json == '{') {
+                ++object_depth;
+                in.push(OBJ);
+                //puts("\033[1m{\033[0m");
+                result += "{\n";
+                indent = true;
+            }
+            else if (*json == '}') {
+                --object_depth;
+                in.pop();
+
+                result += '\n';
+                for (uint8_t i = 0; i < object_depth; ++i) result += "    ";
+                //fputs("\033[1m}\033[0m", stdout);
+                result += '}';
+
+                indent = false; //
+            }
+            else if (*json == ':') {
+                result += " : ";
+            }
+            else if (*json == '"') {
+                uint16_t len = 1;
+                bool esc = false;
+                while (json[len] != '"' || esc) {
+                    if (json[len] == '\\') esc = true;
+                    else esc = false;
+                    ++len;
+                };
+                ++len;
+
+                if (indent) result += "\033[38;5;141m";
+                else result += "\033[38;5;229m";
+
+                result += {json, json + len};
+                result += "\033[0m";
+
+                //printf("\033[32m%.*s\033[0m", len, json);
+                json += len - 1;
+
+                indent = false; //
+            }
+            else if (*json == '-' || (*json >= '0' && *json <= '9') || *json == '.') {
+                uint16_t len = 1;
+                while (json[len] != ',' && json[len] != ' ' && json[len] != '\n' && json[len] != ']' && json[len] != '}') ++len;
+
+                result += "\033[38;5;6m";
+                result += {json, json + len};
+                result += "\033[0m";
+                //printf("\033[33m%.*s\033[0m", len, json);
+                json += len - 1;
+            }
+            else if (*json == 't') { // true
+                //fputs("\033[34mtrue\033[0m", stdout);
+                result += "\033[38;5;216mtrue\033[0m";
+                json += 3;
+            }
+            else if (*json == 'f') { // false
+                //fputs("\033[34mfalse\033[0m", stdout);
+                result += "\033[38;5;216mfalse\033[0m";
+                json += 4;
+            }
+            else if (*json == 'n') { // null
+                result += "\033[38;5;60mnull\033[0m";
+                json += 3;
+            }
+            else if (*json == '[') {
+                result += '[';
+                in.push(LIST);
+            }
+            else if (*json == ']') {
+                result += ']';
+                in.pop();
+            }
+            else if (*json == ',') {
+                result += ',';
+                if (in.top() == OBJ) {
+                    result += '\n';
+                    indent = true;
+                }
+                else result += ' ';
+            }
+
+            if (indent) {
+                for (uint8_t i = 0; i < object_depth; ++i) result += "    ";
+                //indent = false;
+            }
+
+            ++json;
+        }
+        return result;
     }
 }
