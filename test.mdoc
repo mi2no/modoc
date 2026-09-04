@@ -15,6 +15,11 @@
 			-Punkt 3 $x
 		@code[lang = code.lang.cpp]
 			int main() {
+				constexpr uint16_t size = 200;
+				double x[size]{};
+				
+				for (uint16_t i = 0; i < size; ++i) x[i] = i;
+			
 				return 0;
 			}
 		@new_code[lang = code.lang.cpp]

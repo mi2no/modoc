@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 //#include "options.hpp"
+#include "log.hpp"
 #include "string_type.hpp"
 #include "tree.hpp"
 #include "value.hpp"
@@ -439,93 +440,6 @@ struct list_f : node_factory {
 
     void set_node_type_id(uint32_t id) const override {
         list_node::t_id = id;
-    }
-};
-
-struct code_node : node {
-    inline static uint32_t t_id;
-
-    enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE
-    };
-
-    struct token_t {
-        std::string str;
-        token_type type = NONE;
-    };
-
-    std::vector<token_t> tokens{};
-    std::string lang;
-
-    code_node(std::string lang) : lang(lang) {}
-
-    virtual uint32_t type_id() const override {
-        return code_node::t_id;
-    }
-
-
-    const char* type() const override {
-        return "code";
-    }
-
-    uint8_t scope_end() override {
-        return scope_end::ENDSCP;
-    }
-
-    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
-        static const std::unordered_set<std::string> types {"char", "short", "int", "long"};
-        static const std::unordered_set<std::string> keywords {"if", "else", "return", "throw"};
-
-
-        tokens.reserve(tokens.size() + new_tokens.size() + 1);
-
-        {
-            token_t t {"0", NEWL};
-            t.str[0] = tabs;
-            tokens.push_back(t);
-        }
-
-        for (const modoc::string_type& s : new_tokens) {
-            token_t t;
-            t.str = s.view();
-
-            if (types.contains(t.str)) t.type = TYPE;
-            else if (keywords.contains(t.str)) t.type = KEYWORD;
-
-            tokens.push_back(t);
-        }
-    }
-
-    /*virtual void debug_print() const override {
-        printf("[code](lang = %s)\n", lang.c_str());
-    }*/
-
-    const std::vector<node*>* child_nodes() const override {
-        return nullptr;
-    }
-
-    modoc::tree* subtree() override {
-        return nullptr;
-    }
-
-    bool verbatim() const override {
-        return true;
-    }
-
-    void add_node(node*) override {}
-
-};
-
-struct code_f : node_factory {
-    node* instance(uint8_t, const options_t& op) override {
-        if (op.contains("lang") && op.at("lang").type() == value::STRING) {
-            return new code_node((std::string)op.at("lang").string());
-        }
-        return nullptr;
-    }
-
-    void set_node_type_id(uint32_t id) const override {
-        code_node::t_id = id;
     }
 };
 
