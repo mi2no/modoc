@@ -24,6 +24,7 @@
 #include <array>
 
 #include "../node.hpp"
+#include "../nodes/code_temp.hpp"
 
 namespace pdfback {
 
@@ -117,6 +118,7 @@ static const std::array<uint16_t, 95> serif_widths = {
 };
 
 static double char_width(unsigned char c, bool monospace) {
+    if (c == '\t') return 2400.0;
     if (monospace) return 600.0; // Courier is fixed-pitch
 
     if (c >= 32 && c <= 126) return serif_widths[c - 32];
@@ -460,7 +462,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     const double block_top = doc.cursor_y;
     const double block_h = line_h * lines.size();
     doc.draw_rounded_rect(doc.MARGIN + indent - 4.0, block_top - block_h + 3.0,
-                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, {.1, .1, .1});//COLOR_CODE_BG);
+                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, COLOR_CODE_BG);
 
     for (const std::vector<piece>& line : lines) {
         double x = doc.MARGIN + indent + tabs * tab_w;
@@ -471,7 +473,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
             switch (p.type) {
                 case code_node::TYPE: color = COLOR_TYPE; break;
                 case code_node::KEYWORD: color = COLOR_KEYWORD; italic = true; break;
-                default: color = {.9, .9, .9};
+                default: break;//color = {.9, .9, .9};
             }
 
             std::string text = to_pdf_text(p.text);
