@@ -164,7 +164,17 @@ static std::vector<std::string> wrap_text(std::string_view s, double size, doubl
 // Low level PDF file assembly: indirect objects + xref + trailer.
 // ---------------------------------------------------------------------------
 
-struct rgb { double r, g, b; };
+struct rgb { 
+    double r, g, b; 
+
+    static rgb from_uint(uint32_t argb) {
+        rgb result;
+        result.b = (double)(argb & 0xFFu) / 0xFFu;
+        result.g = (double)((argb >>= 8) & 0xFFu) / 0xFFu;
+        result.r = (double)((argb >> 8) & 0xFFu) / 0xFFu;
+        return result;
+    }
+};
 
 struct pdf_writer {
     static constexpr double PAGE_W = 595.0, PAGE_H = 842.0, MARGIN = 50.0;
@@ -401,7 +411,7 @@ struct pdf_writer {
 static const rgb COLOR_TEXT   {0.10, 0.10, 0.10};
 static const rgb COLOR_HEADER {0.15, 0.15, 0.15};
 static const rgb COLOR_BULLET {0.35, 0.35, 0.35};
-static const rgb COLOR_CODE_BG{0.93, 0.93, 0.93};
+static const rgb COLOR_CODE_BG = rgb::from_uint(0xFFF7F7F7u);
 static const rgb COLOR_TYPE   {0.55, 0.42, 0.05};
 static const rgb COLOR_KEYWORD{0.45, 0.20, 0.60};
 
@@ -455,7 +465,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
 
     // Pre-flatten tokens into lines so the background box height is known
     // up front (and so a line never gets split across a page break oddly).
-    struct piece { std::string_view text; code_node::token_type type; };
+    struct piece { std::string_view text; rgb color; };
     std::vector<std::vector<piece>> lines;
     uint8_t tabs = 0;
 
@@ -478,7 +488,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
             if (t->type == code_node::NEWL) lines.push_back({});
             else {
                 if (lines.empty()) lines.push_back({});
-                lines.back().push_back({t->str, t->type});
+                lines.back().push_back({t->str, rgb::from_uint(t->color)});
             }
             
             ptr = t->str.end();
@@ -486,7 +496,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
         }
         else {
             if (lines.empty()) lines.push_back({});
-            lines.back().emplace_back(std::string_view{ptr, t->str.data()}, code_node::NONE);
+            lines.back().emplace_back(std::string_view{ptr, t->str.data()}, COLOR_TEXT);
             ptr = t->str.begin();
         }
     }
@@ -510,18 +520,17 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     for (const std::vector<piece>& line : lines) {
         double x = doc.MARGIN + indent + tabs * tab_w;
         for (const piece& p : line) {
-            rgb color = COLOR_TEXT;
             bool italic = false;
 
-            switch (p.type) {
+            /*switch (p.type) {
                 case code_node::TYPE: color = COLOR_TYPE; break;
                 case code_node::KEYWORD: color = COLOR_KEYWORD; italic = true; break;
                 default: break;//color = {.9, .9, .9};
-            }
+            }*/
 
             std::string text = to_pdf_text(p.text);
             doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
-                          text, color, italic);
+                          text, p.color, italic);
             x += text_width(text, size, true);// + text_width(" ", size, true);
         }
 
