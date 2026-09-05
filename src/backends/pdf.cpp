@@ -469,6 +469,9 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     std::vector<std::vector<piece>> lines;
     uint8_t tabs = 0;
 
+    const rgb color_background = rgb::from_uint(c->meta.at("theme").object().at("background").number());
+    const rgb color_line_nums = rgb::from_uint(c->meta.at("theme").object().at("lineNumbers").number());
+
     /*for (const code_node::token_t& t : c->tokens) {
         if (t.type == code_node::NEWL) {
             tabs = (uint8_t)t.str[0];
@@ -501,6 +504,8 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
         }
     }
 
+    if (lines.back().empty()) lines.pop_back(); // TODO: replace with something nicer
+
     doc.ensure_space(line_h * 2 + pad * 2);
     doc.cursor_y -= 6.0;
 
@@ -515,11 +520,18 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     const double block_top = doc.cursor_y;
     const double block_h = line_h * lines.size();
     doc.draw_rounded_rect(doc.MARGIN + indent - 4.0, block_top - block_h + 3.0,
-                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, COLOR_CODE_BG);
+                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, color_background);
 
-    for (const std::vector<piece>& line : lines) {
+    for (size_t i = 0; i < lines.size(); ++i) {
         double x = doc.MARGIN + indent + tabs * tab_w;
-        for (const piece& p : line) {
+
+        const std::string line_num_str = std::to_string(i + 1);
+        x += ((int)log10(lines.size()) - (int)log10(i + 1)) * text_width(" ", size, true); // right align TODO: remove log10!!!
+        doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3, line_num_str, color_line_nums);
+        x += text_width(line_num_str, size, true);
+        x += 10;
+
+        for (const piece& p : lines[i]) {
             bool italic = false;
 
             /*switch (p.type) {
@@ -560,6 +572,13 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
     else if (node::is_type<text_node>(n)) write_text((const text_node*)n, doc, indent);
     // Anything else (plugin-defined nodes) is expected to already have been
     // lowered to one of the above by the time it reaches a backend.
+
+    auto itr = n->meta.find("caption");
+    if (itr != n->meta.end() && itr->second.type() == value::STRING) {
+        const double padding = (doc.CONTENT_W - text_width(itr->second.string(), BODY_SIZE, false)) / 2;
+        doc.write_paragraph(itr->second.string(), "FSerif", BODY_SIZE, BODY_LINE, padding, COLOR_TEXT, false);
+        doc.cursor_y -= 4.0;
+    }
 }
 
 } // namespace pdfback
