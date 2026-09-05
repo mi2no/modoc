@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -298,13 +299,55 @@ struct pdf_writer {
     // paging as needed. Returns the total height consumed.
     double write_paragraph(std::string_view text, const char* font_res, double size,
                             double line_height, double x_indent, rgb color,
-                            bool monospace, bool italic = false) {
+                            bool monospace, bool italic = false, bool justify = true) {
         std::vector<std::string> lines = wrap_text(text, size, CONTENT_W - x_indent, monospace);
 
-        for (const std::string& line : lines) {
+        if (justify) {
+            for (size_t i = 0; i < lines.size() - 1; ++i) {
+                std::string& line = lines[i];
+                ensure_space(line_height);
+                cursor_y -= line_height;
+                
+                double words_width = text_width(line, size, monospace);
+                std::vector<std::string_view> words;
+                {
+                    const char* word_begin = nullptr;
+                    for (const char* ptr = line.data(); ptr < line.end().base(); ++ptr)
+                        if (*ptr <= ' ') {
+                            words_width -= char_width(*ptr, monospace);
+                            if (word_begin != nullptr) {
+                                words.emplace_back(word_begin, ptr);
+                                word_begin = nullptr;
+                            }
+                        }
+                        else if (*ptr > ' ' && word_begin == nullptr) word_begin = ptr;
+
+                    if (word_begin != nullptr) words.emplace_back(word_begin, line.end().base());
+                }
+
+                double width = 0;
+                for (std::string_view s : words) width += text_width(s, size, monospace);
+                std::cout << width << ' ' << words_width << '\n';
+
+                const double justify_space_width = (CONTENT_W - x_indent - width) / (words.size() - 1);
+
+                double off = MARGIN + x_indent;
+                for (const std::string_view& str : words) {
+                    draw_text(font_res, size, off, cursor_y, str, color, italic);
+                    off += text_width(str, size, monospace) + justify_space_width;
+                }
+            }
+
             ensure_space(line_height);
             cursor_y -= line_height;
-            draw_text(font_res, size, MARGIN + x_indent, cursor_y, line, color, italic);
+            draw_text(font_res, size, MARGIN + x_indent, cursor_y, lines.back(), color, italic);
+        }
+        else {
+            for (const std::string& line : lines) {
+                ensure_space(line_height);
+                cursor_y -= line_height;
+                draw_text(font_res, size, MARGIN + x_indent, cursor_y, line, color, italic);
+            }
         }
 
         return lines.size() * line_height;
