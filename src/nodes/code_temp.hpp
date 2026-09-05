@@ -1,20 +1,25 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include "../node.hpp"
+#include "../lsp_process.hpp"
 
 struct code_node : node {
     inline static uint32_t t_id;
 
     enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR
+        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION
     };
 
     struct token_t {
         std::string_view str;
         token_type type = NONE;
         uint32_t color;
+
+        token_t(std::string_view str, token_type type) : str(str), type(type), color(argb(type)) {}
+        token_t(std::string_view str, token_type type, uint32_t color) : str(str), type(type), color(color) {}
     };
 
     std::string content;
@@ -62,18 +67,20 @@ struct code_node : node {
 
     static uint32_t argb(uint8_t type) {
         switch (type) {
-            case KEYWORD: return 0xFFC6A0F6u;
-            case TYPE: return 0xFFeed49fu;
-            case OPERATOR: return 0xFF91d7e3u;
-            case NUMBER: return 0xFFf5a97fu;
+            case KEYWORD: return 0xFF8839ef;
+            case TYPE: return 0xFFdf8e1d;
+            case OPERATOR: return 0xFF04a5e5;
+            case NUMBER: return 0xFFfe640b;
+            case STRING: return 0xFF40a02b;
+            case FUNCTION: return 0xFF1e66f5;
         }
-        return 0xFF000000u;
+        return 0xFF4c4f69;
     }
 
     //TODO: Could be combined with lsp modoc tokenize????
     static token_t tokenize_value(std::string_view str) {
         static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "uint16_t"};
-        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr"};
+        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include"};
 
         const char* ptr = str.data();
         uint8_t type = NONE;
@@ -116,7 +123,6 @@ struct code_node : node {
                 if ((len == 4 && strncmp(begin, "true", 4) == 0) || (len == 5 && strncmp(begin, "false", 5) == 0)) type = BOOLEAN;
                 else if (types.contains({begin, ptr})) type = TYPE;
                 else if (keywords.contains({begin, ptr})) type = KEYWORD;
-                //else type = PROPERTY;
             }
         }
 
@@ -138,14 +144,13 @@ struct code_node : node {
 
                 begin = nullptr;
             }*/
-            if (*ptr > ' ') {
+            if (*ptr > ' ' && !modoc::operator_chars.contains(*ptr)) {
                 const token_t t = tokenize_value({ptr, str.end()});
                 std::cout << t.str << '\n';
                 result.push_back(t);
                 ptr += t.str.size() - 1;
             }
-
-            if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL);
+            else if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL);
         }
 
         if (begin != nullptr) {
@@ -155,6 +160,44 @@ struct code_node : node {
             /*if (types.contains(view)) result.emplace_back(view, TYPE);
             else if (keywords.contains(view)) result.emplace_back(view, KEYWORD);
             else result.emplace_back(view, NONE);*/
+        }
+
+        {
+            modoc::lsp_process lsp;
+            const std::string_view name = "file:///tmp/main.cpp";
+
+            lsp.init("clangd");
+            
+            lsp.open_document({name, "cpp", str, 1});
+            std::vector<modoc::lsp_process::token> tokens = lsp.request_tokens(name);
+            lsp.close_document(name);
+
+            lsp.shutdown();
+
+            auto itr1 = result.begin();
+            auto itr2 = tokens.begin();
+
+            while (itr1 < result.end() && itr2 < tokens.end()) {
+                if (itr2->str.begin() < itr1->str.begin()) {
+                    std::cout << '<' << itr1->str << ' ' << itr2->str << '\n';
+                    if (lsp.token_types[itr2->type_id] == "function") itr1 = result.insert(itr1, token_t{itr2->str, FUNCTION});
+                    else if (lsp.token_types[itr2->type_id] == "operator") itr1 = result.insert(itr1, token_t{itr2->str, OPERATOR});
+                    ++itr2;
+                }
+                else if (itr2->str.begin() == itr1->str.begin()) {
+                    std::cout << '=' << itr1->str << ' ' << itr2->str << '\n';
+                    if (lsp.token_types[itr2->type_id] == "function") *itr1 = {itr2->str, FUNCTION};
+                    else if (lsp.token_types[itr2->type_id] == "operator") *itr1 = {itr2->str, OPERATOR};
+                    ++itr2;
+                }
+                ++itr1;
+            }
+
+            while (itr2 < tokens.end()) {
+                if (lsp.token_types[itr2->type_id] == "function") result.emplace_back(itr2->str, FUNCTION);
+                else if (lsp.token_types[itr2->type_id] == "operator") result.emplace_back(itr2->str, OPERATOR);
+                ++itr2;
+            }
         }
 
         return result;

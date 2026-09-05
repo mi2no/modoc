@@ -121,7 +121,7 @@ namespace json {
 
             bool esc_chars = false;
             for (char c : value) 
-                if (c == '\n' || c == '\t') {
+                if (c == '\n' || c == '\t' || c == '"') {
                     esc_chars = true;
                     break;
                 }
@@ -131,11 +131,12 @@ namespace json {
                 const char* const end = value.data() + value.size();
 
                 for (const char* ptr = begin; ptr < end; ++ptr) {
-                    if (*ptr < ' ') {
+                    if (*ptr < ' ' || *ptr == '"') {
                         result += std::string_view{begin, ptr};
                        
                         if (*ptr == '\n') result += "\\n";
                         else if (*ptr == '\t') result += "\\t";
+                        else if (*ptr == '"') result += "\\\"";
 
                         begin = ptr + 1;
                     }

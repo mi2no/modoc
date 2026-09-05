@@ -14,11 +14,15 @@
 			Kontynuacja 2 $y
 			-Punkt 3 $x
 		@code[lang = code.lang.cpp]
+			#include <cstdio>
+			
 			int main() {
 				constexpr uint16_t size = 200;
 				double x[size]{};
 				
 				for (uint16_t i = 0; i < size; ++i) x[i] = i;
+			
+				puts("Hello world!");
 			
 				return 0;
 			}

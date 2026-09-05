@@ -48,7 +48,7 @@ namespace modoc {
         int from_lsp[2];
 
         std::vector<std::string> token_types, token_modifiers;
-        std::map<std::string, std::string, std::less<>> docs;
+        std::map<std::string, std::string_view, std::less<>> docs;
 
         void write_all(int fd, std::string_view str) {
             const char* data = str.data();
@@ -259,6 +259,22 @@ namespace modoc {
                 t.modifiers = nums[i++];
                 tokens.push_back(t);
             }
+
+        for (const auto& t : tokens) {
+                std::cout << t.str << ' ' << token_types[t.type_id] << " |";
+
+                uint32_t mods = t.modifiers;
+                uint16_t id = 0;
+                while (mods) {
+                    const uint16_t off = std::countr_zero(mods);
+                    std::cout << ' ' << token_modifiers[id += off];
+                    
+                    mods >>= (off + 1);
+                    ++id;
+                }
+                putchar('\n');
+            }
+
 
             return tokens;
         }
