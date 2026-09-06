@@ -1,5 +1,6 @@
 #include "lsp_process.hpp"
 #include "serialize/serialize.hpp"
+#include <bit>
 #include <string_view>
 
 int main() {
@@ -20,11 +21,27 @@ int main() {
     
     lp.init("clangd");
 
+    printf("types: %s\n", json::serialize_value(lp.token_types).c_str());
+    printf("modifiers: %s\n", json::serialize_value(lp.token_modifiers).c_str());
+
     lp.open_document({uri, "cpp", content, 1});
     
-    std::string tokens = lp.request_tokens("file:///tmp/main.cpp");
-    puts(json::pretty(tokens.c_str()).c_str());
- 
+    std::vector<modoc::lsp_process::token> tokens = lp.request_tokens("file:///tmp/main.cpp");
+    for (const auto& t : tokens) {
+        std::cout << t.str << ' ' << lp.token_types[t.type_id] << " |";
+
+        uint32_t mods = t.modifiers;
+        uint16_t id = 0;
+        while (mods) {
+            const uint16_t off = std::countr_zero(mods);
+            std::cout << ' ' << lp.token_modifiers[id += off];
+            
+            mods >>= (off + 1);
+            ++id;
+        }
+        putchar('\n');
+    }
+
     lp.close_document(uri);
     lp.shutdown();
 }

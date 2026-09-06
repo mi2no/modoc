@@ -59,4 +59,6 @@ namespace modoc {
         while (str[size] != '\0') ++size;
         return size;
     }
+
+    static std::set<pid_t> child_processes_to_close;
 };

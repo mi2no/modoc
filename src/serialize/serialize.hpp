@@ -121,25 +121,27 @@ namespace json {
 
             bool esc_chars = false;
             for (char c : value) 
-                if (c == '\n' || c == '\t') {
+                if (c == '\n' || c == '\t' || c == '"') {
                     esc_chars = true;
                     break;
                 }
 
             if (esc_chars) {
                 const char* begin = value.data();
+                const char* const end = value.data() + value.size();
 
-                for (const char* ptr = begin; ptr < value.end(); ++ptr) {
-                    if (*ptr < ' ') {
+                for (const char* ptr = begin; ptr < end; ++ptr) {
+                    if (*ptr < ' ' || *ptr == '"') {
                         result += std::string_view{begin, ptr};
                        
                         if (*ptr == '\n') result += "\\n";
                         else if (*ptr == '\t') result += "\\t";
+                        else if (*ptr == '"') result += "\\\"";
 
                         begin = ptr + 1;
                     }
                 }
-                if (begin < value.end()) result += std::string_view{begin, value.end()};
+                if (begin < end) result += std::string_view{begin, end};
             }
             else result += value;
 
@@ -266,7 +268,7 @@ namespace json {
 
                     //printf("%c\n", *begin);
 
-                    if (*begin == ']') --depth;
+                    if (*ptr == ']') --depth;
 
                     if (begin != ptr) a.push_back(result);
 
@@ -381,7 +383,7 @@ namespace json {
 
         while (*json != '}' && *json != '\0') {
             while (*json++ != '"');
-            
+           
             const char* ptr = name;
             while (*json != '"' && *ptr != '\0') {
                 if (*json != *ptr) break;
@@ -396,6 +398,8 @@ namespace json {
                 break;
             }
             else while (*json != '"') ++json;
+
+            ++json;
 
             while (*json == ' ' || *json == ':') ++json; // TODO replace later with json character set (", [, t, f, num)
             //printf("V %c\n", *json);

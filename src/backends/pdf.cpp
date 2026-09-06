@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cmath>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -163,7 +164,17 @@ static std::vector<std::string> wrap_text(std::string_view s, double size, doubl
 // Low level PDF file assembly: indirect objects + xref + trailer.
 // ---------------------------------------------------------------------------
 
-struct rgb { double r, g, b; };
+struct rgb { 
+    double r, g, b; 
+
+    static rgb from_uint(uint32_t argb) {
+        rgb result;
+        result.b = (double)(argb & 0xFFu) / 0xFFu;
+        result.g = (double)((argb >>= 8) & 0xFFu) / 0xFFu;
+        result.r = (double)((argb >> 8) & 0xFFu) / 0xFFu;
+        return result;
+    }
+};
 
 struct pdf_writer {
     static constexpr double PAGE_W = 595.0, PAGE_H = 842.0, MARGIN = 50.0;
@@ -298,13 +309,55 @@ struct pdf_writer {
     // paging as needed. Returns the total height consumed.
     double write_paragraph(std::string_view text, const char* font_res, double size,
                             double line_height, double x_indent, rgb color,
-                            bool monospace, bool italic = false) {
+                            bool monospace, bool italic = false, bool justify = true) {
         std::vector<std::string> lines = wrap_text(text, size, CONTENT_W - x_indent, monospace);
 
-        for (const std::string& line : lines) {
+        if (justify) {
+            for (size_t i = 0; i < lines.size() - 1; ++i) {
+                std::string& line = lines[i];
+                ensure_space(line_height);
+                cursor_y -= line_height;
+                
+                double words_width = text_width(line, size, monospace);
+                std::vector<std::string_view> words;
+                {
+                    const char* word_begin = nullptr;
+                    for (const char* ptr = line.data(); ptr < line.end().base(); ++ptr)
+                        if (*ptr <= ' ') {
+                            words_width -= char_width(*ptr, monospace);
+                            if (word_begin != nullptr) {
+                                words.emplace_back(word_begin, ptr);
+                                word_begin = nullptr;
+                            }
+                        }
+                        else if (*ptr > ' ' && word_begin == nullptr) word_begin = ptr;
+
+                    if (word_begin != nullptr) words.emplace_back(word_begin, line.end().base());
+                }
+
+                double width = 0;
+                for (std::string_view s : words) width += text_width(s, size, monospace);
+                std::cout << width << ' ' << words_width << '\n';
+
+                const double justify_space_width = (CONTENT_W - x_indent - width) / (words.size() - 1);
+
+                double off = MARGIN + x_indent;
+                for (const std::string_view& str : words) {
+                    draw_text(font_res, size, off, cursor_y, str, color, italic);
+                    off += text_width(str, size, monospace) + justify_space_width;
+                }
+            }
+
             ensure_space(line_height);
             cursor_y -= line_height;
-            draw_text(font_res, size, MARGIN + x_indent, cursor_y, line, color, italic);
+            draw_text(font_res, size, MARGIN + x_indent, cursor_y, lines.back(), color, italic);
+        }
+        else {
+            for (const std::string& line : lines) {
+                ensure_space(line_height);
+                cursor_y -= line_height;
+                draw_text(font_res, size, MARGIN + x_indent, cursor_y, line, color, italic);
+            }
         }
 
         return lines.size() * line_height;
@@ -358,7 +411,7 @@ struct pdf_writer {
 static const rgb COLOR_TEXT   {0.10, 0.10, 0.10};
 static const rgb COLOR_HEADER {0.15, 0.15, 0.15};
 static const rgb COLOR_BULLET {0.35, 0.35, 0.35};
-static const rgb COLOR_CODE_BG{0.93, 0.93, 0.93};
+static const rgb COLOR_CODE_BG = rgb::from_uint(0xFFF7F7F7u);
 static const rgb COLOR_TYPE   {0.55, 0.42, 0.05};
 static const rgb COLOR_KEYWORD{0.45, 0.20, 0.60};
 
@@ -386,8 +439,13 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent) {
     doc.ensure_space(line_h + 10.0);
     doc.cursor_y -= 10.0; // spacing before heading
 
-    std::string heading = number + "  " + s->title;
-    doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
+    //std::string heading = number + "   " + s->title;
+    //doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
+
+    // TODO: replace with write_paragraph for proper wrapping
+    doc.cursor_y -= line_h;
+    doc.draw_text("FSerifB", size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
+    doc.draw_text("FSerifB", size, doc.MARGIN + indent + text_width(number, size, false) + text_width("   ", size, false), doc.cursor_y, s->title, COLOR_HEADER);
 
     doc.cursor_y -= 4.0;
 
@@ -412,9 +470,14 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
 
     // Pre-flatten tokens into lines so the background box height is known
     // up front (and so a line never gets split across a page break oddly).
-    struct piece { std::string_view text; code_node::token_type type; };
+    struct piece { std::string_view text; rgb color; };
     std::vector<std::vector<piece>> lines;
     uint8_t tabs = 0;
+
+    const rgb color_background = rgb::from_uint(c->meta.at("theme").object().at("background").number());
+    const rgb color_line_nums = rgb::from_uint(c->meta.at("theme").object().at("lineNumbers").number());
+
+    const double padding = c->meta.at("padding").number();
 
     /*for (const code_node::token_t& t : c->tokens) {
         if (t.type == code_node::NEWL) {
@@ -435,7 +498,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
             if (t->type == code_node::NEWL) lines.push_back({});
             else {
                 if (lines.empty()) lines.push_back({});
-                lines.back().push_back({t->str, t->type});
+                lines.back().push_back({t->str, rgb::from_uint(t->color)});
             }
             
             ptr = t->str.end();
@@ -443,10 +506,12 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
         }
         else {
             if (lines.empty()) lines.push_back({});
-            lines.back().emplace_back(std::string_view{ptr, t->str.data()}, code_node::NONE);
+            lines.back().emplace_back(std::string_view{ptr, t->str.data()}, COLOR_TEXT);
             ptr = t->str.begin();
         }
     }
+
+    if (lines.back().empty()) lines.pop_back(); // TODO: replace with something nicer
 
     doc.ensure_space(line_h * 2 + pad * 2);
     doc.cursor_y -= 6.0;
@@ -460,25 +525,33 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     // now (before any of the code lines are drawn) and size it to the full
     // block height, rather than reusing the single-line offset per line.
     const double block_top = doc.cursor_y;
-    const double block_h = line_h * lines.size();
-    doc.draw_rounded_rect(doc.MARGIN + indent - 4.0, block_top - block_h + 3.0,
-                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, COLOR_CODE_BG);
+    const double block_h = line_h * lines.size() + 2 * padding;
+    doc.draw_rounded_rect(doc.MARGIN + indent/* - 4.0*/, block_top - block_h/* + 3.0*/,
+                           doc.CONTENT_W - indent/* + 4.0*/, block_h, 5.0, color_background);
 
-    for (const std::vector<piece>& line : lines) {
-        double x = doc.MARGIN + indent + tabs * tab_w;
-        for (const piece& p : line) {
-            rgb color = COLOR_TEXT;
+    doc.cursor_y -= padding;
+
+    for (size_t i = 0; i < lines.size(); ++i) {
+        double x = doc.MARGIN + indent + padding;//tabs * tab_w;
+
+        const std::string line_num_str = std::to_string(i + 1);
+        x += ((int)log10(lines.size()) - (int)log10(i + 1)) * text_width(" ", size, true); // right align TODO: remove log10!!!
+        doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3, line_num_str, color_line_nums);
+        x += text_width(line_num_str, size, true);
+        x += 10;
+
+        for (const piece& p : lines[i]) {
             bool italic = false;
 
-            switch (p.type) {
+            /*switch (p.type) {
                 case code_node::TYPE: color = COLOR_TYPE; break;
                 case code_node::KEYWORD: color = COLOR_KEYWORD; italic = true; break;
                 default: break;//color = {.9, .9, .9};
-            }
+            }*/
 
             std::string text = to_pdf_text(p.text);
             doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
-                          text, color, italic);
+                          text, p.color, italic);
             x += text_width(text, size, true);// + text_width(" ", size, true);
         }
 
@@ -508,6 +581,13 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
     else if (node::is_type<text_node>(n)) write_text((const text_node*)n, doc, indent);
     // Anything else (plugin-defined nodes) is expected to already have been
     // lowered to one of the above by the time it reaches a backend.
+
+    auto itr = n->meta.find("caption");
+    if (itr != n->meta.end() && itr->second.type() == value::STRING) {
+        const double padding = (doc.CONTENT_W - text_width(itr->second.string(), BODY_SIZE, false)) / 2;
+        doc.write_paragraph(itr->second.string(), "FSerif", BODY_SIZE, BODY_LINE, padding, COLOR_TEXT, false);
+        doc.cursor_y -= 4.0;
+    }
 }
 
 } // namespace pdfback
