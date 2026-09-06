@@ -165,7 +165,9 @@ namespace modoc {
 
             close(to_lsp[1]);
             close(from_lsp[0]);
-            waitpid(pid, nullptr, 0);
+
+            modoc::child_processes_to_close.insert(pid);
+            //waitpid(pid, nullptr, 0);
         }
 
         

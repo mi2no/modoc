@@ -8,6 +8,7 @@
 #include <list>
 #include <stack>
 #include <string_view>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,6 +17,7 @@
 
 #include "node.hpp"
 //#include "options.hpp"
+#include "util.hpp"
 #include "value.hpp"
 #include "tree.hpp"
 
@@ -234,6 +236,11 @@ int main(int argc, char** argv) {
     }
 
     log.log("modoc", "tree", std::string("Destroyed subtrees: ") + std::to_string(modoc::tree::destroy_count));
+
+    if (modoc::child_processes_to_close.size()) {
+        log.log("modoc", "clean up", "Closing child processes...");
+        for (pid_t p : modoc::child_processes_to_close) waitpid(p, nullptr, 0);
+    }
 
     return 0;
 }

@@ -439,8 +439,13 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent) {
     doc.ensure_space(line_h + 10.0);
     doc.cursor_y -= 10.0; // spacing before heading
 
-    std::string heading = number + "  " + s->title;
-    doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
+    //std::string heading = number + "   " + s->title;
+    //doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
+
+    // TODO: replace with write_paragraph for proper wrapping
+    doc.cursor_y -= line_h;
+    doc.draw_text("FSerifB", size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
+    doc.draw_text("FSerifB", size, doc.MARGIN + indent + text_width(number, size, false) + text_width("   ", size, false), doc.cursor_y, s->title, COLOR_HEADER);
 
     doc.cursor_y -= 4.0;
 
