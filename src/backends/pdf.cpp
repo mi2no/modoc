@@ -472,6 +472,8 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     const rgb color_background = rgb::from_uint(c->meta.at("theme").object().at("background").number());
     const rgb color_line_nums = rgb::from_uint(c->meta.at("theme").object().at("lineNumbers").number());
 
+    const double padding = c->meta.at("padding").number();
+
     /*for (const code_node::token_t& t : c->tokens) {
         if (t.type == code_node::NEWL) {
             tabs = (uint8_t)t.str[0];
@@ -518,12 +520,14 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     // now (before any of the code lines are drawn) and size it to the full
     // block height, rather than reusing the single-line offset per line.
     const double block_top = doc.cursor_y;
-    const double block_h = line_h * lines.size();
-    doc.draw_rounded_rect(doc.MARGIN + indent - 4.0, block_top - block_h + 3.0,
-                           doc.CONTENT_W - indent + 4.0, block_h, 5.0, color_background);
+    const double block_h = line_h * lines.size() + 2 * padding;
+    doc.draw_rounded_rect(doc.MARGIN + indent/* - 4.0*/, block_top - block_h/* + 3.0*/,
+                           doc.CONTENT_W - indent/* + 4.0*/, block_h, 5.0, color_background);
+
+    doc.cursor_y -= padding;
 
     for (size_t i = 0; i < lines.size(); ++i) {
-        double x = doc.MARGIN + indent + tabs * tab_w;
+        double x = doc.MARGIN + indent + padding;//tabs * tab_w;
 
         const std::string line_num_str = std::to_string(i + 1);
         x += ((int)log10(lines.size()) - (int)log10(i + 1)) * text_width(" ", size, true); // right align TODO: remove log10!!!

@@ -208,6 +208,8 @@ struct code_node : node {
         if (!meta.contains("theme")) meta["theme"] = constants.at("code").object().at("theme").object().at("latte");
         modoc::logger::s_log("code", "meta", this->meta.at("theme").to_string());
 
+        if (!meta.contains("padding")) meta["padding"] = 6;
+
         modoc::logger::s_log("code", "verbatim", str);
         content = str;
 
