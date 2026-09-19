@@ -107,6 +107,12 @@ T read_cast(const uint8_t* buffer) {
     return a;
 }
 
+template <typename T, std::endian target = std::endian::native>
+void read_cast(T& a, const uint8_t* buffer) {
+    apply_groups<target>(a, buffer, typename layout<T>::groups{});
+}
+
+
 template <std::endian from, std::endian to, typename T>
 T cast_endian(T a) {
     if constexpr (from != to) {
@@ -128,6 +134,28 @@ T cast_to_native(T a) {
 }
 
 
+template <typename T, std::endian endian, std::endian target = std::endian::native>
+T read_cast_simple(const uint8_t* buffer) {
+    T result{};
+    memcpy(&result, buffer, sizeof(T));
+
+    if constexpr (endian != std::endian::native) result = cast_endian<endian, target>(result);
+
+    return result;
+}
+
+template <typename T, std::endian endian, std::endian target = std::endian::native>
+T* read_cast_simple(const uint8_t* buffer, size_t count) {
+    T* result = new T[count];
+    memcpy(result, buffer, sizeof(T) * count);
+
+    if constexpr (endian != std::endian::native) {
+        for (size_t i = 0; i < count; ++i)
+            result[i] = cast_endian<endian, target>(result[i]);
+    }
+
+    return result;
+}
 
 
 template <typename T>
