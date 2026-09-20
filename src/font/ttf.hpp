@@ -5,8 +5,10 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <ios>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <iostream>
 #include <utility>
@@ -52,7 +54,7 @@ uint8_t* readf(const char* path, size_t& size) {
     size = ftell(file);
     rewind(file);
 
-    uint8_t* buffer = (uint8_t*)malloc(size);
+    uint8_t* buffer = new uint8_t[size];
     fread(buffer, 1, size, file);
     fclose(file);
 
@@ -63,7 +65,11 @@ uint8_t* readf(const char* path, size_t& size) {
  * CMAP
  * =======================================================
  */
+struct cmap_t;
+
 struct format_4_t {
+    friend cmap_t;
+
     uint16_t length;
     uint16_t lang;
     uint16_t seg_count;
@@ -71,11 +77,48 @@ struct format_4_t {
     uint16_t entry_selector;
     uint16_t range_shift;
 
-    uint16_t* end_code;
+    uint16_t* end_code = nullptr;
     uint16_t* start_code;
     int16_t* id_delta;
     uint16_t* id_range_offset;
     uint16_t* glyph_id_array;
+
+    format_4_t() = default;
+
+    format_4_t(format_4_t&& f) {
+        length = f.length;
+        lang = f.lang;
+        seg_count = f.seg_count;
+        search_range = f.search_range;
+        entry_selector = f.entry_selector;
+        range_shift = f.range_shift;
+        end_code = f.end_code;
+        start_code = f.start_code;
+        id_delta = f.id_delta;
+        id_range_offset = f.id_range_offset;
+        glyph_id_array = f.glyph_id_array;
+
+        f.end_code = nullptr;
+    }
+
+    format_4_t& operator=(format_4_t&& f) {
+        length = f.length;
+        lang = f.lang;
+        seg_count = f.seg_count;
+        search_range = f.search_range;
+        entry_selector = f.entry_selector;
+        range_shift = f.range_shift;
+        end_code = f.end_code;
+        start_code = f.start_code;
+        id_delta = f.id_delta;
+        id_range_offset = f.id_range_offset;
+        glyph_id_array = f.glyph_id_array;
+
+        f.end_code = nullptr;
+
+        return *this;
+    }
+
 
     void print() {
         printf("length: %hu\nlang: %hu\nseg_count: %hu\nsearch_range: %hu\nentry_selector: %hu\nrange_shift: %hu\n", length, lang, seg_count, search_range, entry_selector, range_shift);
@@ -103,8 +146,6 @@ struct format_4_t {
 
     ~format_4_t() {
         if (end_code != nullptr) delete[] end_code;
-        if (start_code != nullptr) delete[] start_code;
-        if (glyph_id_array != nullptr) delete[] glyph_id_array;
     }
 };
 
@@ -169,24 +210,30 @@ cmap_t cmap_t::get(std::span<uint8_t> buffer) {
                 tbl.seg_count >>= 1;
                 tbl.print();
 
-                tbl.end_code = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, tbl.seg_count);
-                subtable_itr += sizeof(uint16_t) * tbl.seg_count;
-                subtable_itr += sizeof(uint16_t); // Reserved pad
+                const size_t glyph_id_count = tbl.length / sizeof(uint16_t) - (4 * tbl.seg_count + 1/*reserved pad*/);
+                const size_t total_count = (tbl.seg_count << 2) + glyph_id_count; 
+                
+                tbl.end_code = new uint16_t[total_count];
+                uint16_t *storage_itr = tbl.end_code;
 
-                tbl.start_code = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, tbl.seg_count * 3);
-                tbl.id_delta = (int16_t*)tbl.start_code + tbl.seg_count;
-                tbl.id_range_offset = (uint16_t*)tbl.id_delta + tbl.seg_count;
-                subtable_itr += sizeof(uint16_t) * tbl.seg_count * 3;
+                // Copy raw uint16_ts & set endianess to native
+                read_cast_simple<std::endian::big>(storage_itr, subtable_itr, total_count);
 
-                tbl.glyph_id_array = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, (tbl.length - (subtable_itr - subtable)) / sizeof(uint16_t));
+                tbl.start_code = tbl.end_code + tbl.seg_count;
+                storage_itr += tbl.seg_count << 1;
+
+                std::destroy_n(storage_itr, tbl.seg_count); // Destoyr uint16_ts
+                tbl.id_delta = std::start_lifetime_as_array<int16_t>(storage_itr, tbl.seg_count); // Create int16_ts
+                storage_itr += tbl.seg_count;
+
+                tbl.id_range_offset = storage_itr;
+                tbl.glyph_id_array = tbl.id_range_offset + tbl.seg_count;
 
                 //for (size_t i = 0; i < tbl.seg_count; ++i)
                 //    printf("%hu\n", cast_to_native<std::endian::big>(tbl.end_code[i]));
 
                 cmap.format_4 = std::move(tbl);
                 tbl.end_code = nullptr;
-                tbl.start_code = nullptr;
-                tbl.glyph_id_array = nullptr;
             }
         }
 
@@ -406,13 +453,40 @@ struct hmtx_t {
     long_hor_metric_t* h_metrics = nullptr;
     fword_t* left_side_bearings = nullptr;
 
+    hmtx_t() = default;
+
+    hmtx_t(hmtx_t&& hmtx) {
+        h_metrics = hmtx.h_metrics;
+        left_side_bearings = hmtx.left_side_bearings;
+
+        hmtx.h_metrics = nullptr;
+        hmtx.left_side_bearings = nullptr;
+    }
+    
+    hmtx_t& operator=(hmtx_t&& hmtx) {
+        h_metrics = hmtx.h_metrics;
+        left_side_bearings = hmtx.left_side_bearings;
+
+        hmtx.h_metrics = nullptr;
+        hmtx.left_side_bearings = nullptr;
+
+        return *this;
+    }
+
     static hmtx_t get(std::span<uint8_t> buffer, uint16_t number_of_h_metrics, uint16_t num_glyphs) {
         hmtx_t result;
         const uint8_t* ptr = buffer.data();
 
         if (ptr + number_of_h_metrics * sizeof(long_hor_metric_t) > buffer.end().base()) return result;
 
-        result.h_metrics = (long_hor_metric_t*)read_cast_simple<ufword_t, std::endian::big>(ptr, number_of_h_metrics << 1);
+        result.h_metrics = new long_hor_metric_t[number_of_h_metrics];
+        memcpy(result.h_metrics, ptr, number_of_h_metrics * sizeof(long_hor_metric_t));
+
+        for (uint16_t i = 0; i < number_of_h_metrics; ++i) {
+            result.h_metrics[i].advance_width = cast_to_native<std::endian::big>(result.h_metrics[i].advance_width);
+            result.h_metrics[i].lsb = cast_to_native<std::endian::big>(result.h_metrics[i].lsb);
+        }
+
         ptr += number_of_h_metrics * sizeof(long_hor_metric_t);
 
         if (ptr + (num_glyphs - number_of_h_metrics) * sizeof(fword_t) > buffer.end().base()) return result;  
@@ -426,6 +500,14 @@ struct hmtx_t {
         if (h_metrics != nullptr) delete[] h_metrics;
         if (left_side_bearings != nullptr) delete[] left_side_bearings;
     }
+};
+
+template<>
+struct layout<hmtx_t::long_hor_metric_t> {
+    using self = hmtx_t::long_hor_metric_t;
+    using groups = group_list<
+        group<std::endian::big, &self::advance_width, &self::lsb>
+    >;
 };
 
 
@@ -464,11 +546,30 @@ struct layout<table_record_t> {
 };
 
 struct ttf_resource {
+    uint8_t* stream = nullptr;
+    
     head_t head;
     cmap_t cmap;
     maxp_t maxp;
     hhea_t hhea;
     hmtx_t hmtx;
+
+    ttf_resource() = default;
+
+    ttf_resource(ttf_resource&& ttf) {
+        head = std::move(ttf.head);
+        cmap = std::move(ttf.cmap);
+        maxp = std::move(ttf.maxp);
+        hhea = std::move(ttf.hhea);
+        hmtx = std::move(ttf.hmtx);
+        stream = ttf.stream;
+
+        ttf.stream = nullptr;
+    }
+
+    ~ttf_resource() {
+        if (stream != nullptr) delete[] stream;
+    }
 };
 
 static ttf_resource load_ttf(const char* path) {
@@ -521,7 +622,7 @@ static ttf_resource load_ttf(const char* path) {
         ptr += packed_size<table_record_t>();
     } 
 
-    if (loca_off) {
+    /*if (loca_off) {
         puts("LOCA");
         loca_arr = loca({buffer + loca_off, buffer + size}, ttf.maxp.num_glyphs, ttf.head.index_to_loc_format);
 
@@ -530,13 +631,14 @@ static ttf_resource load_ttf(const char* path) {
     }
     if (glyf_off && loca_arr != nullptr) {
         glyph_t::get({buffer + glyf_off, buffer + size}, {loca_arr, loca_arr + ttf.maxp.num_glyphs + 1});
-    }
+    }*/
     if (hmtx_off) {
         ttf.hmtx = hmtx_t::get({buffer + hmtx_off, buffer + size}, ttf.hhea.number_of_h_metrics, ttf.maxp.num_glyphs);
     }
 
     if (loca_arr != nullptr) delete[] loca_arr;
-    if (buffer != nullptr) free(buffer);
+
+    ttf.stream = buffer;
 
     return ttf;
 }

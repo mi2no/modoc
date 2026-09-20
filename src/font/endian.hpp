@@ -123,7 +123,7 @@ void read_cast(T& a, const uint8_t* buffer) {
 
 
 template <std::endian from, std::endian to, typename T>
-T cast_endian(T a) {
+inline T cast_endian(T a) {
     if constexpr (from != to) {
         if constexpr (sizeof(T) == sizeof(uint64_t))
             return __builtin_bswap64(a);
@@ -165,6 +165,17 @@ T* read_cast_simple(const uint8_t* buffer, size_t count) {
 
     return result;
 }
+
+template <std::endian endian, std::endian target = std::endian::native, typename T>
+void read_cast_simple(T* dest, const uint8_t* buffer, size_t count) {
+    memcpy(dest, buffer, sizeof(T) * count);
+
+    if constexpr (endian != std::endian::native) {
+        for (size_t i = 0; i < count; ++i)
+            dest[i] = cast_endian<endian, target>(dest[i]);
+    }
+}
+
 
 
 template <typename T>
