@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 #include <utility>
 #include <cstdlib>
 #include <bit>
@@ -38,15 +40,22 @@ struct group {
     static void apply(T& dest, const uint8_t*& src) {
         (
             [&] {
-                using member_type = typename member_pointer_traits<decltype(members)>::value_type;
+                using member = decltype(members);
 
-                memcpy(&(dest.*members), src, sizeof(member_type));
+                if constexpr (std::is_member_object_pointer_v<member>) {
+                    using member_type = typename member_pointer_traits<decltype(members)>::value_type;
 
-                if constexpr (endian != std::endian::native) {
-                    swap_endian<member_type>(&(dest.*members), std::make_index_sequence<1>{});
+                    memcpy(&(dest.*members), src, sizeof(member_type));
+
+                    if constexpr (endian != std::endian::native) {
+                        swap_endian<member_type>(&(dest.*members), std::make_index_sequence<1>{});
+                    }
+
+                    src += sizeof(member_type);
                 }
-
-                src += sizeof(member_type);
+                else if constexpr (std::is_same_v<member, std::size_t>) {
+                    src += members;
+                }
             }(),
             ...
         );

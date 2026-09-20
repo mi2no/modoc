@@ -6,14 +6,18 @@
 #include <cstdio>
 #include <cstring>
 #include <ios>
+#include <iterator>
 #include <span>
 #include <iostream>
+#include <utility>
 
 #include "endian.hpp"
 
 using fixed_t = uint32_t;
 using long_date_time_t = int64_t;
 using version_16_dot_16_t = uint32_t;
+using fword_t = int16_t;
+using ufword_t = uint16_t;
 
 consteval uint32_t tag(const char (&ptr)[5]) {
     return  ((uint32_t)ptr[0] << 24) |
@@ -33,6 +37,8 @@ enum : uint32_t {
     CMAP = tag("cmap"),
     HEAD = tag("head"),
     MAXP = tag("maxp"),
+    HHEA = tag("hhea"),
+    HMTX = tag("hmtx"),
     GLYF = tag("glyf"),
     LOCA = tag("loca")
 };
@@ -57,18 +63,6 @@ uint8_t* readf(const char* path, size_t& size) {
  * CMAP
  * =======================================================
  */
-
-struct cmap_t {
-    uint16_t version;
-    uint16_t table_count;
-};
-
-struct encoding_record_t {
-    uint16_t platform_id;
-    uint16_t encoding_id;
-    uint32_t offset;
-};
-
 struct format_4_t {
     uint16_t length;
     uint16_t lang;
@@ -79,13 +73,54 @@ struct format_4_t {
 
     uint16_t* end_code;
     uint16_t* start_code;
-    uint16_t* id_delta;
+    int16_t* id_delta;
     uint16_t* id_range_offset;
     uint16_t* glyph_id_array;
 
     void print() {
         printf("length: %hu\nlang: %hu\nseg_count: %hu\nsearch_range: %hu\nentry_selector: %hu\nrange_shift: %hu\n", length, lang, seg_count, search_range, entry_selector, range_shift);
     }
+
+    uint16_t lookup(uint32_t codepoint) const {
+        if (codepoint > 0xFFFF) return 0; // format 4 = tylko BMP
+
+        const uint16_t cp = (uint16_t)codepoint;
+
+        for (uint16_t i = 0; i < seg_count; ++i) {
+            if (end_code[i] < cp) continue;
+            if (start_code[i] > cp) return 0; // brak segmentu obejmującego ten znak
+
+            if (id_range_offset[i] == 0)
+                return (uint16_t)(cp + id_delta[i]); // rzutowanie na uint16_t = mod 65536 za darmo
+
+            const uint16_t idx = i + id_range_offset[i] / 2 + (cp - start_code[i]) - seg_count;
+            const uint16_t gid = glyph_id_array[idx];
+
+            return gid == 0 ? 0 : (uint16_t)(gid + id_delta[i]);
+        }
+        return 0; // teoretycznie nieosiągalne — ostatni end_code to zawsze 0xFFFF
+    }
+
+    ~format_4_t() {
+        if (end_code != nullptr) delete[] end_code;
+        if (start_code != nullptr) delete[] start_code;
+        if (glyph_id_array != nullptr) delete[] glyph_id_array;
+    }
+};
+
+struct cmap_t {
+    uint16_t version;
+    uint16_t table_count;
+
+    format_4_t format_4;
+
+    static cmap_t get(std::span<uint8_t> buffer);
+};
+
+struct encoding_record_t {
+    uint16_t platform_id;
+    uint16_t encoding_id;
+    uint32_t offset;
 };
 
 template <>
@@ -109,7 +144,7 @@ struct layout<format_4_t> {
     >;
 };
 
-void cmap(std::span<uint8_t> buffer) {
+cmap_t cmap_t::get(std::span<uint8_t> buffer) {
     const uint8_t* ptr = buffer.data();
 
     cmap_t cmap = read_cast<cmap_t>(ptr);
@@ -120,25 +155,45 @@ void cmap(std::span<uint8_t> buffer) {
     for (size_t i = 0; i < cmap.table_count; ++i) {
         encoding_record_t er = read_cast<encoding_record_t>(ptr);
         
-        const uint8_t* subtable = buffer.data() + er.offset;
-        const uint16_t format_id = cast_to_native<std::endian::big>(*(uint16_t*)subtable);
+        const uint8_t * const subtable = buffer.data() + er.offset, * subtable_itr = subtable;
+        const uint16_t format_id = read_cast_simple<uint16_t, std::endian::big>(subtable_itr);
+        subtable_itr += sizeof(format_id);
 
         printf("=====\nPlatform id: %hu\nEncoding id: %hu\nOffset: %u\nFormat id: %hu\n=====\n", er.platform_id, er.encoding_id, er.offset, format_id);
         
         switch (format_id) {
             case 4:
             {
-                format_4_t tbl = read_cast<format_4_t>(subtable + sizeof(format_id));
+                format_4_t tbl = read_cast<format_4_t>(subtable_itr);
+                subtable_itr += packed_size<format_4_t>();
+                tbl.seg_count >>= 1;
                 tbl.print();
 
-                tbl.end_code = (uint16_t*)(subtable + sizeof(format_id) + sizeof(uint16_t) * 6);
-                for (size_t i = 0; i < tbl.seg_count; ++i)
-                    printf("%hu\n", cast_to_native<std::endian::big>(tbl.end_code[i]));
+                tbl.end_code = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, tbl.seg_count);
+                subtable_itr += sizeof(uint16_t) * tbl.seg_count;
+                subtable_itr += sizeof(uint16_t); // Reserved pad
+
+                tbl.start_code = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, tbl.seg_count * 3);
+                tbl.id_delta = (int16_t*)tbl.start_code + tbl.seg_count;
+                tbl.id_range_offset = (uint16_t*)tbl.id_delta + tbl.seg_count;
+                subtable_itr += sizeof(uint16_t) * tbl.seg_count * 3;
+
+                tbl.glyph_id_array = read_cast_simple<uint16_t, std::endian::big>(subtable_itr, (tbl.length - (subtable_itr - subtable)) / sizeof(uint16_t));
+
+                //for (size_t i = 0; i < tbl.seg_count; ++i)
+                //    printf("%hu\n", cast_to_native<std::endian::big>(tbl.end_code[i]));
+
+                cmap.format_4 = std::move(tbl);
+                tbl.end_code = nullptr;
+                tbl.start_code = nullptr;
+                tbl.glyph_id_array = nullptr;
             }
         }
 
         ptr += packed_size<encoding_record_t>();
     }
+
+    return cmap;
 }
 
 /* ======================================================
@@ -165,6 +220,16 @@ struct head_t {
     int16_t font_direction_hint;
     int16_t index_to_loc_format;
     int16_t glyph_data_format;
+
+    static head_t get(std::span<uint8_t> buffer) {
+        const uint8_t* ptr = buffer.data();
+
+        head_t head = read_cast<head_t>(ptr);
+
+        printf("MajorVersion: %hu\nMinorVersion: %hu\nMagic: %u\n", head.major_version, head.minor_version, head.magic_number);
+
+        return head;
+    }
 };
 
 template <>
@@ -173,15 +238,6 @@ struct layout<head_t> {
         group<std::endian::big, &head_t::major_version, &head_t::minor_version, &head_t::font, &head_t::checksum_adjustment, &head_t::magic_number, &head_t::flags, &head_t::units_per_em, &head_t::created, &head_t::modified, &head_t::x_min, &head_t::y_min, &head_t::x_max, &head_t::y_max, &head_t::mac_style, &head_t::lowest_rec_ppem, &head_t::font_direction_hint, &head_t::index_to_loc_format, &head_t::glyph_data_format>
     >;
 };
-
-static void head(std::span<uint8_t> buffer) {
-    const uint8_t* ptr = buffer.data();
-
-    head_t head = read_cast<head_t>(ptr);
-    ptr += packed_size<head_t>();
-
-    printf("MajorVersion: %hu\nMinorVersion: %hu\nMagic: %u\n", head.major_version, head.minor_version, head.magic_number);
-}
 
 /* ======================================================
  * MAXP
@@ -234,6 +290,8 @@ struct layout<maxp_t> {
 static inline uint32_t* loca(std::span<uint8_t> buffer, uint16_t num_glyphs, int16_t index_to_loc_format) {
     uint32_t* result = nullptr;
     const uint32_t count = num_glyphs + 1;
+
+    std::cout << index_to_loc_format << '\n';
 
     if (index_to_loc_format == 0) { // Short offset
         result = new uint32_t[count];
@@ -300,6 +358,76 @@ glyph_t* glyph_t::get(std::span<uint8_t> buffer, std::span<uint32_t> loca) {
     return nullptr;
 }
 
+/* =======================================================
+ * HHEA
+ * =======================================================
+ */
+
+struct hhea_t {
+    uint16_t major_version;
+    uint16_t minor_version;
+    fword_t ascender;
+    fword_t descender;
+    fword_t line_gap;
+    ufword_t advance_width_max;
+    fword_t min_left_side_bearing;
+    fword_t min_right_side_bearing;
+    fword_t x_max_extent;
+    int16_t caret_slope_rise;
+    int16_t caret_slope_run;
+    int16_t caret_offset;
+    //int16_t reserved[4];
+    int16_t metric_data_format;
+    uint16_t number_of_h_metrics;
+
+    static hhea_t get(std::span<uint8_t> buffer) {
+        return read_cast<hhea_t>(buffer.data());
+    }
+};
+
+template <>
+struct layout<hhea_t> {
+    using groups = group_list<
+        group<std::endian::big, &hhea_t::major_version, &hhea_t::minor_version, &hhea_t::ascender, &hhea_t::descender, &hhea_t::line_gap, &hhea_t::advance_width_max, &hhea_t::min_left_side_bearing, &hhea_t::min_right_side_bearing, &hhea_t::x_max_extent, &hhea_t::caret_slope_rise, &hhea_t::caret_slope_run, &hhea_t::caret_offset, sizeof(int16_t) * 4, &hhea_t::metric_data_format, &hhea_t::number_of_h_metrics>
+    >;
+};
+
+/* =======================================================
+ * HMTX
+ * =======================================================
+ */
+
+struct hmtx_t {
+    struct long_hor_metric_t {
+        ufword_t advance_width;
+        fword_t lsb;
+    };
+    
+    long_hor_metric_t* h_metrics = nullptr;
+    fword_t* left_side_bearings = nullptr;
+
+    static hmtx_t get(std::span<uint8_t> buffer, uint16_t number_of_h_metrics, uint16_t num_glyphs) {
+        hmtx_t result;
+        const uint8_t* ptr = buffer.data();
+
+        if (ptr + number_of_h_metrics * sizeof(long_hor_metric_t) > buffer.end().base()) return result;
+
+        result.h_metrics = (long_hor_metric_t*)read_cast_simple<ufword_t, std::endian::big>(ptr, number_of_h_metrics << 1);
+        ptr += number_of_h_metrics * sizeof(long_hor_metric_t);
+
+        if (ptr + (num_glyphs - number_of_h_metrics) * sizeof(fword_t) > buffer.end().base()) return result;  
+
+        result.left_side_bearings = read_cast_simple<fword_t, std::endian::big>(ptr, num_glyphs - number_of_h_metrics);
+
+        return result;
+    }
+
+    ~hmtx_t() {
+        if (h_metrics != nullptr) delete[] h_metrics;
+        if (left_side_bearings != nullptr) delete[] left_side_bearings;
+    }
+};
+
 
 /* =======================================================
  * LOAD_TTF
@@ -339,6 +467,8 @@ struct ttf_resource {
     head_t head;
     cmap_t cmap;
     maxp_t maxp;
+    hhea_t hhea;
+    hmtx_t hmtx;
 };
 
 static ttf_resource load_ttf(const char* path) {
@@ -354,7 +484,7 @@ static ttf_resource load_ttf(const char* path) {
     uint8_t* ptr = buffer + packed_size<table_t>();
 
     ttf_resource ttf;
-    uint32_t glyf_off = 0, loca_off = 0;
+    uint32_t glyf_off = 0, loca_off = 0, hmtx_off = 0;
     uint32_t* loca_arr = nullptr;
 
     for (size_t i = 0; i < table.table_count; ++i) {
@@ -363,13 +493,19 @@ static ttf_resource load_ttf(const char* path) {
         std::span<uint8_t> span = {buffer + record.offset, buffer + size};
         switch (record.tag) {
             case CMAP:
-                /*ttf.cmap =*/ cmap(span);
+                ttf.cmap = cmap_t::get(span);
                 break;
             case HEAD:
-                head(span);
+                ttf.head = head_t::get(span);
                 break;
             case MAXP:
                 ttf.maxp = maxp_t::get(span);
+                break;
+            case HHEA:
+                ttf.hhea = hhea_t::get(span);
+                break;
+            case HMTX:
+                hmtx_off = record.offset;
                 break;
             case GLYF:
                 glyf_off = record.offset;
@@ -386,12 +522,17 @@ static ttf_resource load_ttf(const char* path) {
     } 
 
     if (loca_off) {
-        loca_arr = loca({buffer + loca_off, buffer + size}, ttf.maxp.num_glyphs, ttf.head.index_to_loc_format);
         puts("LOCA");
-        for (size_t i = 0; i <= ttf.maxp.num_glyphs; ++i) std::cout << loca_arr[i] << '\n';
+        loca_arr = loca({buffer + loca_off, buffer + size}, ttf.maxp.num_glyphs, ttf.head.index_to_loc_format);
+
+        if (loca_arr == nullptr) puts("LOCA ERROR");
+        else for (size_t i = 0; i <= ttf.maxp.num_glyphs; ++i) std::cout << loca_arr[i] << '\n';
     }
     if (glyf_off && loca_arr != nullptr) {
         glyph_t::get({buffer + glyf_off, buffer + size}, {loca_arr, loca_arr + ttf.maxp.num_glyphs + 1});
+    }
+    if (hmtx_off) {
+        ttf.hmtx = hmtx_t::get({buffer + hmtx_off, buffer + size}, ttf.hhea.number_of_h_metrics, ttf.maxp.num_glyphs);
     }
 
     if (loca_arr != nullptr) delete[] loca_arr;
