@@ -8,14 +8,16 @@
 #include <cstdlib>
 #include <bit>
 
-template <typename>
-struct member_pointer_traits;
+namespace end {
+    template <typename>
+    struct member_pointer_traits;
 
-template <class C, typename T>
-struct member_pointer_traits<T C::*> {
-    using class_type = C;
-    using value_type = T;
-};
+    template <class C, typename T>
+    struct member_pointer_traits<T C::*> {
+        using class_type = C;
+        using value_type = T;
+    };
+}
 
 template <typename T, size_t... i>
 void swap_endian(void* vptr, std::index_sequence<i...>) {
@@ -43,7 +45,7 @@ struct group {
                 using member = decltype(members);
 
                 if constexpr (std::is_member_object_pointer_v<member>) {
-                    using member_type = typename member_pointer_traits<decltype(members)>::value_type;
+                    using member_type = typename end::member_pointer_traits<decltype(members)>::value_type;
 
                     memcpy(&(dest.*members), src, sizeof(member_type));
 
@@ -184,7 +186,7 @@ consteval size_t packed_size() {
         return ((
             []<auto... members>(group<groups::endian, members...>) {
                 return (sizeof(
-                    typename member_pointer_traits<decltype(members)>::value_type
+                    typename end::member_pointer_traits<decltype(members)>::value_type
                 ) + ...);
             }(groups{})
         ) + ...);

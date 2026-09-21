@@ -81,7 +81,7 @@ struct format_4_t {
     uint16_t* start_code;
     int16_t* id_delta;
     uint16_t* id_range_offset;
-    uint16_t* glyph_id_array;
+    std::span<uint16_t> glyph_id_array;
 
     format_4_t() = default;
 
@@ -102,6 +102,8 @@ struct format_4_t {
     }
 
     format_4_t& operator=(format_4_t&& f) {
+        if (end_code != nullptr) delete[] end_code;
+
         length = f.length;
         lang = f.lang;
         seg_count = f.seg_count;
@@ -129,7 +131,10 @@ struct format_4_t {
 
         const uint16_t cp = (uint16_t)codepoint;
 
+        std::cout << "LOOKUP_DBG cp: " << codepoint << '\n';
+
         for (uint16_t i = 0; i < seg_count; ++i) {
+            std::cout << "LOOKUP_DBG start: " << start_code[i] << " end: "<< end_code[i] << "idrangeoff: " << id_range_offset[i] << '\n';
             if (end_code[i] < cp) continue;
             if (start_code[i] > cp) return 0; // brak segmentu obejmującego ten znak
 
@@ -137,7 +142,12 @@ struct format_4_t {
                 return (uint16_t)(cp + id_delta[i]); // rzutowanie na uint16_t = mod 65536 za darmo
 
             const uint16_t idx = i + id_range_offset[i] / 2 + (cp - start_code[i]) - seg_count;
+
+            if (idx >= glyph_id_array.size()) return 0;
+
             const uint16_t gid = glyph_id_array[idx];
+            
+            fprintf(stderr, "DEBUG lookup: cp=0x%04X in segment %hu, computed idx=%hu\n", cp, i, idx);
 
             return gid == 0 ? 0 : (uint16_t)(gid + id_delta[i]);
         }
@@ -201,7 +211,7 @@ cmap_t cmap_t::get(std::span<uint8_t> buffer) {
         subtable_itr += sizeof(format_id);
 
         printf("=====\nPlatform id: %hu\nEncoding id: %hu\nOffset: %u\nFormat id: %hu\n=====\n", er.platform_id, er.encoding_id, er.offset, format_id);
-        
+       
         switch (format_id) {
             case 4:
             {
@@ -210,14 +220,19 @@ cmap_t cmap_t::get(std::span<uint8_t> buffer) {
                 tbl.seg_count >>= 1;
                 tbl.print();
 
-                const size_t glyph_id_count = tbl.length / sizeof(uint16_t) - (4 * tbl.seg_count + 1/*reserved pad*/);
+                const size_t glyph_id_count = tbl.length / sizeof(uint16_t) - (4 * tbl.seg_count + 1/*reserved pad*/) - 7 /*format, length, lang, ..., range_shift*/;
                 const size_t total_count = (tbl.seg_count << 2) + glyph_id_count; 
                 
                 tbl.end_code = new uint16_t[total_count];
                 uint16_t *storage_itr = tbl.end_code;
 
                 // Copy raw uint16_ts & set endianess to native
-                read_cast_simple<std::endian::big>(storage_itr, subtable_itr, total_count);
+                memcpy(storage_itr, subtable_itr, tbl.seg_count * sizeof(uint16_t));
+                subtable_itr += tbl.seg_count * sizeof(uint16_t);
+                subtable_itr += sizeof(uint16_t); // Reserved pad
+                memcpy(storage_itr + tbl.seg_count, subtable_itr, (total_count - tbl.seg_count) * sizeof(uint16_t));
+                
+                for (size_t j = 0; j < total_count; ++j) tbl.end_code[j] = cast_to_native<std::endian::big>(tbl.end_code[j]);
 
                 tbl.start_code = tbl.end_code + tbl.seg_count;
                 storage_itr += tbl.seg_count << 1;
@@ -227,15 +242,22 @@ cmap_t cmap_t::get(std::span<uint8_t> buffer) {
                 storage_itr += tbl.seg_count;
 
                 tbl.id_range_offset = storage_itr;
-                tbl.glyph_id_array = tbl.id_range_offset + tbl.seg_count;
+                tbl.glyph_id_array = {tbl.id_range_offset + tbl.seg_count, tbl.id_range_offset + tbl.seg_count + glyph_id_count};
 
                 //for (size_t i = 0; i < tbl.seg_count; ++i)
                 //    printf("%hu\n", cast_to_native<std::endian::big>(tbl.end_code[i]));
+
+                for (uint16_t j = 0; j < tbl.seg_count; ++j) {
+                    std::cout << tbl.start_code[j] << ' ' << tbl.end_code[j] << ' ' << tbl.id_range_offset[j] << '\n';
+                }
 
                 cmap.format_4 = std::move(tbl);
                 tbl.end_code = nullptr;
             }
         }
+
+
+        if (er.platform_id == 3 && er.encoding_id == 1 && format_id == 4) break;
 
         ptr += packed_size<encoding_record_t>();
     }
@@ -450,7 +472,7 @@ struct hmtx_t {
         fword_t lsb;
     };
     
-    long_hor_metric_t* h_metrics = nullptr;
+    std::span<long_hor_metric_t> h_metrics;
     fword_t* left_side_bearings = nullptr;
 
     hmtx_t() = default;
@@ -459,7 +481,7 @@ struct hmtx_t {
         h_metrics = hmtx.h_metrics;
         left_side_bearings = hmtx.left_side_bearings;
 
-        hmtx.h_metrics = nullptr;
+        hmtx.h_metrics = {};
         hmtx.left_side_bearings = nullptr;
     }
     
@@ -467,7 +489,7 @@ struct hmtx_t {
         h_metrics = hmtx.h_metrics;
         left_side_bearings = hmtx.left_side_bearings;
 
-        hmtx.h_metrics = nullptr;
+        hmtx.h_metrics = {};
         hmtx.left_side_bearings = nullptr;
 
         return *this;
@@ -479,8 +501,11 @@ struct hmtx_t {
 
         if (ptr + number_of_h_metrics * sizeof(long_hor_metric_t) > buffer.end().base()) return result;
 
-        result.h_metrics = new long_hor_metric_t[number_of_h_metrics];
-        memcpy(result.h_metrics, ptr, number_of_h_metrics * sizeof(long_hor_metric_t));
+        {
+            long_hor_metric_t* h_metrics = new long_hor_metric_t[number_of_h_metrics];
+            memcpy(h_metrics, ptr, number_of_h_metrics * sizeof(long_hor_metric_t));
+            result.h_metrics = {h_metrics, h_metrics + number_of_h_metrics};
+        }
 
         for (uint16_t i = 0; i < number_of_h_metrics; ++i) {
             result.h_metrics[i].advance_width = cast_to_native<std::endian::big>(result.h_metrics[i].advance_width);
@@ -496,8 +521,13 @@ struct hmtx_t {
         return result;
     }
 
+    long_hor_metric_t get_metrics(uint16_t i) {
+        if (i >= h_metrics.size()) return {h_metrics.back().advance_width, left_side_bearings[i - h_metrics.size()]};
+        return h_metrics[i];
+    }
+
     ~hmtx_t() {
-        if (h_metrics != nullptr) delete[] h_metrics;
+        if (h_metrics.size()) delete[] h_metrics.data();
         if (left_side_bearings != nullptr) delete[] left_side_bearings;
     }
 };
@@ -546,7 +576,7 @@ struct layout<table_record_t> {
 };
 
 struct ttf_resource {
-    uint8_t* stream = nullptr;
+    std::span<uint8_t> stream;
     
     head_t head;
     cmap_t cmap;
@@ -564,11 +594,11 @@ struct ttf_resource {
         hmtx = std::move(ttf.hmtx);
         stream = ttf.stream;
 
-        ttf.stream = nullptr;
+        ttf.stream = {};
     }
 
     ~ttf_resource() {
-        if (stream != nullptr) delete[] stream;
+        if (stream.size()) delete[] stream.data();
     }
 };
 
@@ -638,7 +668,7 @@ static ttf_resource load_ttf(const char* path) {
 
     if (loca_arr != nullptr) delete[] loca_arr;
 
-    ttf.stream = buffer;
+    ttf.stream = {buffer, buffer + size};
 
     return ttf;
 }

@@ -21,11 +21,13 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <array>
 
 #include "../node.hpp"
 #include "../nodes/code_temp.hpp"
+#include "../font/ttf.hpp"
 
 namespace pdfback {
 
@@ -185,13 +187,25 @@ struct pdf_writer {
 
     int font_serif, font_serif_bold, font_courier;
 
+    // Embedded JetBrains Mono, used for code blocks (base-14 Courier has no
+    // real Latin-Extended coverage and looks nothing like the font the user
+    // actually writes code in).
+    ttf_resource embedded_font;
+    double embedded_scale = 1.0; // font units -> PDF's 1000-unit glyph space
+    int font_embedded = 0;       // Type0 object id, referenced from Resources
+    int embedded_descriptor_obj = 0, embedded_descendant_obj = 0, embedded_tounicode_obj = 0;
+    std::unordered_map<uint16_t, uint32_t> used_glyphs; // gid -> a codepoint that produced it
+
     std::string page_stream;
     double cursor_y;
 
-    pdf_writer() {
+    pdf_writer() : embedded_font(load_ttf("font/JetBrainsMono/static/JetBrainsMono-Regular.ttf")) {
         font_serif = add_font("Times-Roman");
         font_serif_bold = add_font("Times-Bold");
         font_courier = add_font("Courier");
+
+        embedded_scale = 1000.0 / embedded_font.head.units_per_em;
+        font_embedded = add_embedded_font();
 
         start_page();
     }
@@ -213,6 +227,113 @@ struct pdf_writer {
         return add_object(body);
     }
 
+    // Embeds embedded_font as a Type0/Identity-H composite font: the whole
+    // TTF file goes in verbatim (no subsetting), addressed by raw glyph ID
+    // rather than by character code. /W (glyph widths) and /ToUnicode (for
+    // copy-paste / search) both depend on which glyphs actually get used, so
+    // their object bodies are only reserved here and filled in later, in
+    // finalize_embedded_font() once the whole document has been rendered.
+    int add_embedded_font() {
+        const auto& stream = embedded_font.stream;
+
+        std::string file_body_hex;
+        for (uint8_t byte : embedded_font.stream) {
+            char hex[3];
+            snprintf(hex, sizeof(hex), "%02X", byte);
+            file_body_hex += hex;
+        }
+
+
+        std::string file_body((const char*)stream.data(), stream.size());
+        int file_id = add_object(
+            "<< /Length " + std::to_string(file_body_hex.size()) +
+            " /Length1 " + std::to_string(stream.size()) + " /Filter /ASCIIHexDecode >>\nstream\n" +
+            file_body_hex + "\nendstream");
+
+        const double ascent = embedded_font.hhea.ascender * embedded_scale;
+        const double descent = embedded_font.hhea.descender * embedded_scale;
+        const double cap_height = embedded_font.head.units_per_em * 0.7 * embedded_scale; // OS/2 not parsed yet; rough guess
+        const double bbox_x_min = embedded_font.head.x_min * embedded_scale;
+        const double bbox_y_min = embedded_font.head.y_min * embedded_scale;
+        const double bbox_x_max = embedded_font.head.x_max * embedded_scale;
+        const double bbox_y_max = embedded_font.head.y_max * embedded_scale;
+
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+            "<< /Type /FontDescriptor /FontName /JetBrainsMono /Flags 33"
+            " /FontBBox [%.0f %.0f %.0f %.0f] /ItalicAngle 0 /Ascent %.0f /Descent %.0f"
+            " /CapHeight %.0f /StemV 80 /FontFile2 %d 0 R >>",
+            bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max, ascent, descent, cap_height, file_id);
+        embedded_descriptor_obj = add_object(buf);
+
+        embedded_descendant_obj = reserve();
+        embedded_tounicode_obj = reserve();
+
+        return add_object(
+            "<< /Type /Font /Subtype /Type0 /BaseFont /JetBrainsMono /Encoding /Identity-H"
+            " /DescendantFonts [" + std::to_string(embedded_descendant_obj) + " 0 R]"
+            " /ToUnicode " + std::to_string(embedded_tounicode_obj) + " 0 R >>");
+    }
+
+    // Fills in the /W array and ToUnicode CMap that add_embedded_font() left
+    // as placeholders, now that every glyph actually used is known.
+    void finalize_embedded_font() {
+        fprintf(stderr, "\n===== used_glyphs map (size=%zu) =====\n", used_glyphs.size());
+        
+        for (const auto& [gid, cp] : used_glyphs) {
+            fprintf(stderr, "  gid=0x%04X -> cp=0x%04X ('%c')\n", gid, cp, cp >= 32 && cp < 127 ? (char)cp : '?');
+        }
+        fprintf(stderr, "===== END =====\n\n");
+
+        std::string w_array = "[";
+        for (const auto& [gid, cp] : used_glyphs) {
+            const double w = embedded_font.hmtx.get_metrics(gid).advance_width * embedded_scale;
+            w_array += std::to_string(gid) + " [" + std::to_string((int)std::round(w)) + "] ";
+        }
+        w_array += ']';
+
+        objects[embedded_descendant_obj - 1] =
+            "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /JetBrainsMono"
+            " /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity-H) /Supplement 0 >>"
+            " /FontDescriptor " + std::to_string(embedded_descriptor_obj) + " 0 R"
+            " /CIDToGIDMap /Identity /DW " + std::to_string((int)std::round(600 * embedded_scale)) +
+            " /W " + w_array + " >>";
+
+        std::string cmap_body =
+            "/CIDInit /ProcSet findresource begin\n"
+            "12 dict begin\n"
+            "begincmap\n"
+            "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity-H) /Supplement 0 >> def\n"
+            "/CMapName /Adobe-Identity-UCS def\n"
+            "/CMapType 2 def\n"
+            "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n";
+
+        // bfchar blocks are capped at 100 entries per PDF spec; chunk accordingly.
+        size_t count = 0;
+        std::string chunk;
+        for (const auto& [gid, cp] : used_glyphs) {
+            fprintf(stderr, "DEBUG ToUnicode: gid=0x%04X cp=0x%04X\n", gid, cp);  // ← DODAJ TU
+                                                                                  
+            if (count % 100 == 0) {
+                if (count) cmap_body += chunk + "endbfchar\n";
+                chunk = "beginbfchar\n";
+            }
+
+            char line[32];
+            snprintf(line, sizeof(line), "<%04X> <%04X>\n", gid, cp > 0xFFFF ? 0xFFFDu : cp);
+            chunk += line;
+            ++count;
+        }
+        if (count) cmap_body += chunk + "endbfchar\n";
+
+        cmap_body += "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend";
+
+        fprintf(stderr, "\n===== TOUNICODE CMAP =====\n%s\n===== END =====\n", cmap_body.c_str());
+
+        objects[embedded_tounicode_obj - 1] =
+            "<< /Length " + std::to_string(cmap_body.size()) + " >>\nstream\n" + cmap_body + "\nendstream";
+    }
+
     void start_page() {
         page_stream.clear();
         cursor_y = PAGE_H - MARGIN;
@@ -227,7 +348,8 @@ struct pdf_writer {
             std::to_string((int)PAGE_W) + ' ' + std::to_string((int)PAGE_H) + "]"
             " /Resources << /Font << /FSerif " + std::to_string(font_serif) + " 0 R"
             " /FSerifB " + std::to_string(font_serif_bold) + " 0 R"
-            " /FCourier " + std::to_string(font_courier) + " 0 R >> >>"
+            " /FCourier " + std::to_string(font_courier) + " 0 R"
+            " /FEmbed " + std::to_string(font_embedded) + " 0 R >> >>"
             " /Contents " + std::to_string(content_id) + " 0 R >>";
 
         page_ids.push_back(add_object(page_body));
@@ -305,6 +427,57 @@ struct pdf_writer {
         page_stream += ") Tj ET Q\n";
     }
 
+    // Same as draw_text, but for the embedded Identity-H font: text in the
+    // content stream is raw glyph IDs (2 bytes big-endian each), not
+    // WinAnsi-encoded characters, so it goes in as a hex string (<...>)
+    // rather than a literal string. Looks up each codepoint's GID via the
+    // font's cmap and records it in used_glyphs, so finalize_embedded_font()
+    // can later build /W and /ToUnicode from exactly what got used.
+    void draw_text_embedded(double size, double x, double y, std::string_view utf8_text,
+                             rgb color, bool italic = false) {
+        if (utf8_text.empty()) return;
+
+        std::string hex;
+        hex.reserve(utf8_text.size() * 4);
+
+        size_t i = 0;
+        while (i < utf8_text.size()) {
+            uint32_t cp = utf8_decode(utf8_text, i);
+            uint16_t gid = embedded_font.cmap.format_4.lookup(cp);
+            used_glyphs[gid] = cp;
+
+            fprintf(stderr, "DEBUG: cp=0x%04X gid=0x%04X\n", cp, gid);  // ← DODAJ TU
+
+            char digits[5];
+            snprintf(digits, sizeof(digits), "%04X", gid);
+            hex += digits;
+        }
+
+        double shear = italic ? 0.25 : 0.0;
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+            "q %.3f %.3f %.3f rg BT /FEmbed %.2f Tf 1 0 %.3f 1 %.2f %.2f Tm <",
+            color.r, color.g, color.b, size, shear, x, y);
+
+        page_stream += buf;
+        page_stream += hex;
+        page_stream += "> Tj ET Q\n";
+    }
+
+    // Sum of advance widths (in text-space units, i.e. already * size / 1000)
+    // for utf8_text as rendered by the embedded font — the GID-based analogue
+    // of text_width() for the base-14 fonts.
+    double embedded_text_width(std::string_view utf8_text, double size) {
+        double w = 0;
+        size_t i = 0;
+        while (i < utf8_text.size()) {
+            uint32_t cp = utf8_decode(utf8_text, i);
+            uint16_t gid = embedded_font.cmap.format_4.lookup(cp);
+            w += embedded_font.hmtx.get_metrics(gid).advance_width * embedded_scale;
+        }
+        return w / 1000.0 * size;
+    }
+
     // Writes a paragraph, wrapping it to fit `width` starting at x_indent,
     // paging as needed. Returns the total height consumed.
     double write_paragraph(std::string_view text, const char* font_res, double size,
@@ -364,6 +537,7 @@ struct pdf_writer {
     }
 
     std::string finish() {
+        finalize_embedded_font();
         end_page();
 
         int pages_id = reserve(); // object 2, filled in below
@@ -549,10 +723,9 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
                 default: break;//color = {.9, .9, .9};
             }*/
 
-            std::string text = to_pdf_text(p.text);
-            doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
-                          text, p.color, italic);
-            x += text_width(text, size, true);// + text_width(" ", size, true);
+            doc.draw_text_embedded(size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
+                          p.text, p.color, italic);
+            x += doc.embedded_text_width(p.text, size);
         }
 
         doc.cursor_y -= line_h;
