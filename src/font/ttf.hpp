@@ -521,7 +521,7 @@ struct hmtx_t {
         return result;
     }
 
-    long_hor_metric_t get_metrics(uint16_t i) {
+    long_hor_metric_t get_metrics(uint16_t i) const {
         if (i >= h_metrics.size()) return {h_metrics.back().advance_width, left_side_bearings[i - h_metrics.size()]};
         return h_metrics[i];
     }
@@ -595,6 +595,21 @@ struct ttf_resource {
         stream = ttf.stream;
 
         ttf.stream = {};
+    }
+
+    ttf_resource& operator=(ttf_resource&& ttf) {
+        if (stream.size()) delete[] stream.data();
+
+        head = std::move(ttf.head);
+        cmap = std::move(ttf.cmap);
+        maxp = std::move(ttf.maxp);
+        hhea = std::move(ttf.hhea);
+        hmtx = std::move(ttf.hmtx);
+        stream = ttf.stream;
+
+        ttf.stream = {};
+
+        return *this;
     }
 
     ~ttf_resource() {
