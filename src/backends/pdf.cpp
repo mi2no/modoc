@@ -722,7 +722,7 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t 
     // TODO: replace with write_paragraph for proper wrapping
     doc.cursor_y -= line_h;
     doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
-    doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, COLOR_HEADER);
+    doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, number_font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, COLOR_HEADER);
 
     doc.cursor_y -= 4.0;
 

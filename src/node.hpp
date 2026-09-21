@@ -236,6 +236,9 @@ struct sec_node : public group_node {
 
         for (uint8_t i = 0; i < id_v.size(); ++i)
             id[i] = id_v[i];
+
+        meta["font"] = constants.at("font").object().at("DMSerifText");
+        meta["number.font"] = constants.at("font").object().at("Gelasio").object().at("SemiBold");
     }
 
     /*sec_node() = default; // TODO: temp

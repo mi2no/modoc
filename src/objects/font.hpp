@@ -23,7 +23,11 @@ namespace modoc {
             obj["FunnelDisplay"] = load("font/Funnel_Display/static/FunnelDisplay-Regular.ttf");
             obj["GoogleSansCode"] = load("font/Google_Sans_Code/static/GoogleSansCode-Regular.ttf");
             obj["DMSerifText"] = load("font/DM_Serif_Text/DMSerifText-Regular.ttf");
-            obj["Gelasio"] = load("font/Gelasio/static/Gelasio-Regular.ttf");
+            obj["Gelasio"] = value::from_object({
+                {"Regular", load("font/Gelasio/static/Gelasio-Regular.ttf")},
+                {"Bold", load("font/Gelasio/static/Gelasio-Bold.ttf")},
+                {"SemiBold", load("font/Gelasio/static/Gelasio-SemiBold.ttf")}
+            });
 
             std::cout << "Resources: " << resources.size() << '\n';
 
