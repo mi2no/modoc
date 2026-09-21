@@ -184,6 +184,8 @@ int main(int argc, char** argv) {
 
     register_node_factory("math", new math_f());
 
+    modoc::font_obj::init();
+
     printf("Node factories: %zu\n", node_factories.size());
     for (auto entry : node_factories) entry.second->init();
 

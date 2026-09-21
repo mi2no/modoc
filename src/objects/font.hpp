@@ -7,7 +7,7 @@
 
 namespace modoc {
     namespace font_obj {
-        static std::vector<ttf_resource> resources;
+        inline std::vector<ttf_resource> resources;
 
         static size_t load(std::string_view path) {
             resources.push_back(load_ttf(path.data()));
@@ -17,7 +17,8 @@ namespace modoc {
         static void init() {
             value::object_t obj;
             
-            obj["JetBrainsMono"] = load("../font/JetBrainsMono/static/JetBrainsMono-Regular.ttf"); 
+            obj["JetBrainsMono"] = load("font/JetBrainsMono/static/JetBrainsMono-Regular.ttf");
+            std::cout << "Resources: " << resources.size() << '\n';
 
             register_constant("font", value::from_object(std::move(obj)));
         } 
