@@ -22,7 +22,7 @@ enum scope_end : uint8_t {
 };
 
 struct node {
-    std::map<std::string_view, value> meta;
+    /*std::map<std::string_view, value>*/ value::object_t meta;
     std::unordered_set<std::string_view> tags;
 
     virtual const char* type() const = 0;
@@ -51,7 +51,7 @@ struct node {
 
     virtual void add_meta(const options_t& meta) {
         for (const auto& entry : meta)
-            this->meta[entry.first] = entry.second;
+            this->meta[std::string(entry.first)] = entry.second; // TODO: replace std::string width std::string_view - somehow
     }
     /*virtual void add_meta(const std::vector<std::pair<std::string_view, value>>& entires) {
         for (const std::)

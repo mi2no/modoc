@@ -15,7 +15,7 @@ std::string temp_format_escape_chars(std::string&& str) {
         bool slash = false;
         for (const char c : str) {
             if (c == '\\' && !slash) slash = true;
-            else if (slash && (c == 'n' || c == '"' || c == 't' || c == '\\')) {
+            else if (slash && (c == 'n' || c == '"' || c == 't' || c == 'r' || c == '\\')) {
                 slash = false;
                 ++escape_chars;
             }
@@ -40,6 +40,9 @@ std::string temp_format_escape_chars(std::string&& str) {
                         break;
                     case 't':
                         *ptr = '\t';
+                        break;
+                    case 'r':
+                        *ptr = '\r';
                         break;
                     case '\\':
                         *ptr = '\\';

@@ -133,13 +133,11 @@ struct font_t {
     font_t(std::string_view name) : data(std::string(name)) {}
 
     font_t& operator=(const ttf_resource* ttf) {
-        this->~font_t();
         data = ttf;
         return *this;
     }
 
     font_t& operator=(std::string_view name) {
-        this->~font_t();
         data = std::string(name);
         return *this;
     }
@@ -711,12 +709,19 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t 
     doc.ensure_space(line_h + 10.0);
     doc.cursor_y -= 10.0; // spacing before heading
 
+    font_t number_font = font;
+    auto itr = s->meta.find("number.font");
+    if (itr != s->meta.end() && itr->second.type() == value::NUMBER) {
+        const size_t id = itr->second.number();
+        if (modoc::font_obj::resources.size() > id) number_font = &modoc::font_obj::resources[id];
+    }
+
     //std::string heading = number + "   " + s->title;
     //doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
 
     // TODO: replace with write_paragraph for proper wrapping
     doc.cursor_y -= line_h;
-    doc.draw_text(font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
+    doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
     doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, COLOR_HEADER);
 
     doc.cursor_y -= 4.0;
@@ -855,21 +860,35 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
         std::cout << "Resources: " << modoc::font_obj::resources.size() << '\n'; 
     }
 
+    std::string m;
+    for (auto entry : n->meta) {
+        m += '[';
+        m += entry.first;
+        m += " : ";
+        m += entry.second.to_string();
+        m += ']';
+    }
+    std::cout << "Meta: " << m << " type: ";
+
     if (node::is_type<sec_node>(n)) {
+        std::cout << "sec\n";
         if (font.is_unset()) font = "FSerifB";
         write_sec((const sec_node*)n, doc, indent, font);
     }
     else if (node::is_type<list_node>(n)) {
+        std::cout << "list\n";
         if (font.is_unset()) font = "FSerif";
         write_list((const list_node*)n, doc, indent, font);
     }
     else if (node::is_type<group_node>(n)) children_to_pdf(n, doc, indent);
     else if (node::is_type<code_node>(n)) {
+        std::cout << "code\n";
         if (font.is_unset()) font = "FCourier";
         std::cout << "Font set : " << !font.is_unset() << "\n";
         write_code((const code_node*)n, doc, indent, font);
     }
     else if (node::is_type<text_node>(n)) {
+        std::cout << "text\n";
         if (font.is_unset()) font = "FSerif";
         write_text((const text_node*)n, doc, indent, font);
     }

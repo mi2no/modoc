@@ -1,12 +1,10 @@
 #include "ttf.hpp"
 #include <memory>
 
-int main() {
-    constexpr const char* path = "JetBrainsMono/static/JetBrainsMono-Regular.ttf";
+int main(int argc, char** argv) {
+    constexpr const char* jbm_path = "JetBrainsMono/static/JetBrainsMono-Regular.ttf";
+
+    const char* path = (argc >= 2) ? argv[1] : jbm_path;
     
     load_ttf(path);
-
-    std::unique_ptr<uint8_t[]> ptr = std::make_unique<uint8_t[]>(10);
-
-    std::cout << sizeof(ptr) << '\n';
 }
