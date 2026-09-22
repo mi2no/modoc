@@ -85,7 +85,7 @@ struct repeat_node : special_node {
 };
 
 struct repeat_f : node_factory {
-    node* instance(uint8_t depth, const options_t& op) override {
+    node* instance(modoc::tree& parent, uint8_t depth, const options_t& op) override {
         double from = 0, to = 5; // TODO: replce with 'value' type
         if (op.contains("from") && op.at("from").type() == value::NUMBER)
             from = op.at("from").number();

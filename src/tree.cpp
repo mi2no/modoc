@@ -25,6 +25,7 @@ void paste_children(std::vector<modoc::uninitialized_tree::unode>& utree, const 
 
 modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& un, const uint8_t depth, const bool copy_text) {
     modoc::tree result;
+    result.parent_tree = &tree;
     const std::function<const value*(std::string_view)> get_var_func = [&tree](std::string_view name) {return tree.get_variable(name);};
 
     if (un.is_node()) {
@@ -41,7 +42,7 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
         }
 
         //printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
-        node* n = node_factories.at(nt.node_name.view())->instance(depth, map);
+        node* n = node_factories.at(nt.node_name.view())->instance(result, depth, map);
 
         if (n != nullptr) {
             {
@@ -129,7 +130,7 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
                 log.log("modoc", "expand-children", std::to_string(nt.children.size()));
                 log.log("modoc", "paste", modoc::uninitialized_tree::to_string(expanded));
                 
-                modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true));
+                modoc::tree initialized = std::move(modoc::tree::initialize(&tree, expanded, depth, true)); // TODO: replace tree with result?
                 
                 log.log("modoc", "expand", initialized.to_string());
                 /*std::vector<node*> result = std::move(initialized.nodes);

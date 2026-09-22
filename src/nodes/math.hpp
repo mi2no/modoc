@@ -43,7 +43,7 @@ struct math_f : node_factory {
         register_constant("math", std::move(obj));
     }
 
-    virtual node* instance(uint8_t, const options_t&) override {
+    virtual node* instance(modoc::tree& parent, uint8_t, const options_t&) override {
         return nullptr;
     }
 

@@ -197,7 +197,7 @@ struct gen_f : node_factory {
         register_constant("gen", obj);
     }
 
-    node* instance(uint8_t depth, const options_t& op) override {
+    node* instance(modoc::tree& parent, uint8_t depth, const options_t& op) override {
         if (op.contains("mode")) {
             const value v = op.at("mode");
             if (v.type() == value::NUMBER) return new gen_node(depth, op.at("cmd").string(), v.number());

@@ -82,7 +82,7 @@ struct node {
 
 struct node_factory {
     virtual void init() {}; // TODO: remove
-    virtual node* instance(uint8_t nesting, const options_t&) = 0;
+    virtual node* instance(modoc::tree& parent, uint8_t nesting, const options_t&) = 0;
     virtual node* deserialize(uint8_t depth, const std::unordered_map<std::string_view, const char*>&) { return nullptr; }//= 0;
     virtual void set_node_type_id(uint32_t) const = 0;
     virtual ~node_factory() = default;
@@ -180,7 +180,7 @@ struct group_node : node {
     }
     
     uint8_t scope_end() override {
-        return scope_end::ENDSCP;
+        return scope_end::START;
     }
 
 
@@ -206,7 +206,7 @@ struct group_node : node {
 struct group_f : node_factory {
     std::vector<uint8_t> id;
 
-    node* instance(uint8_t, const options_t&) override {
+    node* instance(modoc::tree& parent, uint8_t, const options_t&) override {
         return new group_node();
     }
     
@@ -360,7 +360,7 @@ struct sec_f : node_factory {
         ++id.back();
     }
 
-    node* instance(uint8_t nesting, const options_t&) override {
+    node* instance(modoc::tree& parent, uint8_t nesting, const options_t&) override {
         handle_depth(nesting);
         //return new sec_node(nesting);
         return new sec_node(id);
@@ -438,7 +438,7 @@ struct list_node : public group_node {
 };
 
 struct list_f : node_factory {
-    node* instance(uint8_t, const options_t&) override {
+    node* instance(modoc::tree& parent, uint8_t, const options_t&) override {
         return new list_node();
     }
 

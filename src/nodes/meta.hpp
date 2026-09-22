@@ -82,7 +82,7 @@ struct meta_node : special_node {
 };
 
 struct meta_f : node_factory {
-    node* instance(uint8_t depth, const options_t& op) override {
+    node* instance(modoc::tree& parent, uint8_t depth, const options_t& op) override {
         return new meta_node();
     }
 

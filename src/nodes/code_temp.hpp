@@ -292,7 +292,7 @@ struct code_f : node_factory {
         register_constant("code", std::move(obj));
     }
 
-    node* instance(uint8_t, const options_t& op) override {
+    node* instance(modoc::tree& parent, uint8_t, const options_t& op) override {
         if (op.contains("lang") && op.at("lang").type() == value::STRING) {
             return new code_node((std::string)op.at("lang").string());
         }
