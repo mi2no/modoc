@@ -713,7 +713,7 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t 
     auto itr = s->meta.find("number.font");
     if (itr != s->meta.end() && itr->second.type() == value::NUMBER) {
         const size_t id = itr->second.number();
-        if (modoc::font_obj::resources.size() > id) number_font = &modoc::font_obj::resources[id];
+        if (modoc::font_obj::resources.size() > id) number_font = modoc::font_obj::get_resource(id);
     }
 
     //std::string heading = number + "   " + s->title;
@@ -856,7 +856,7 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
     std::cout << "Font found: " << (itr != n->meta.end()) << '\n';
     if (itr != n->meta.end() && itr->second.type() == value::NUMBER) {
         size_t id = itr->second.number();
-        if (modoc::font_obj::resources.size() > id) font = &modoc::font_obj::resources[id];
+        if (modoc::font_obj::resources.size() > id) font = modoc::font_obj::get_resource(id);
         std::cout << "Resources: " << modoc::font_obj::resources.size() << '\n'; 
     }
 
