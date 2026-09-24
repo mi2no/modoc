@@ -837,7 +837,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent, font_
     doc.cursor_y -= 6.0;
 }
 
-static void write_text(const text_node* t, pdf_writer& doc, double indent, font_t font) {
+static void write_text(const text_node* t, pdf_writer& doc, double indent, font_t font, double font_size) {
     std::string joined;
     for (const modoc::string_type& s : t->tokens) {
         joined += to_pdf_text(s.view());
@@ -845,7 +845,7 @@ static void write_text(const text_node* t, pdf_writer& doc, double indent, font_
     }
     if (!joined.empty()) joined.pop_back();
 
-    doc.write_paragraph(joined, font, BODY_SIZE, BODY_LINE, indent, COLOR_TEXT, false);
+    doc.write_paragraph(joined, font, font_size, BODY_LINE, indent, COLOR_TEXT, false);
     doc.cursor_y -= 4.0; // paragraph spacing
 }
 
@@ -859,6 +859,10 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
         if (modoc::font_obj::resources.size() > id) font = modoc::font_obj::get_resource(id);
         std::cout << "Resources: " << modoc::font_obj::resources.size() << '\n'; 
     }
+
+    double font_size = BODY_SIZE;
+    itr = n->meta.find("font.size");
+    if (itr != n->meta.end() && itr->second.type() == value::NUMBER) font_size *= itr->second.number();
 
     std::string m;
     for (auto entry : n->meta) {
@@ -890,7 +894,7 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
     else if (node::is_type<text_node>(n)) {
         std::cout << "text\n";
         if (font.is_unset()) font = "FSerif";
-        write_text((const text_node*)n, doc, indent, font);
+        write_text((const text_node*)n, doc, indent, font, font_size);
     }
     // Anything else (plugin-defined nodes) is expected to already have been
     // lowered to one of the above by the time it reaches a backend.

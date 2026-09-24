@@ -43,11 +43,11 @@ struct title_node : special_node {
     std::vector<modoc::uninitialized_tree::unode> expand(modoc::tree& subtree) const override {
         std::vector<modoc::uninitialized_tree::unode> result;
 
-        modoc::uninitialized_tree::unode group = {{"group", false}, {"", false}, {"", false}, {"", false}};
+        modoc::uninitialized_tree::unode group = {{"group", false}, {}, {}, {}};
 
-        modoc::uninitialized_tree::unode title_n = {{title, false}};
-        modoc::uninitialized_tree::unode author_n = {{author, false}};
-        modoc::uninitialized_tree::unode date_n = {{date, false}};
+        modoc::uninitialized_tree::unode title_n = {{title, false}, {"font = font.DMSerifText, font.size = 2", false}};
+        modoc::uninitialized_tree::unode author_n = {{author, false}, {"font.size = 1.5", false}};
+        modoc::uninitialized_tree::unode date_n = {{date, false}, {"font = font.Gelasio.Bold", false}};
 
         group.node().children.push_back(std::move(title_n));
         group.node().children.push_back(std::move(author_n));

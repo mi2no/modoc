@@ -40,6 +40,11 @@ namespace modoc {
                 std::vector<unode> children;
             };
 
+            struct text_type {
+                modoc::string_type text;
+                modoc::string_type meta;
+            };
+
             struct node_serialized {
                 modoc::string_type name;
                 std::vector<unode> children;
@@ -48,7 +53,8 @@ namespace modoc {
 
             using value_type = std::variant<
                 node_type,
-                modoc::string_type,
+                //modoc::string_type,
+                text_type,
                 //std::string_view, // text
                 bool//, // <insert>
                 //node_serialized
@@ -57,7 +63,7 @@ namespace modoc {
             value_type _value;
 
             unode(bool) : _value(true) {}
-            unode(modoc::string_type&& view) : _value(std::move(view)) {}
+            unode(modoc::string_type&& text, modoc::string_type&& meta) : _value(text_type{std::move(text), std::move(meta)}) {}
             unode(modoc::string_type&& name, modoc::string_type&& tags, modoc::string_type&& options, modoc::string_type&& meta) : _value(node_type{std::move(name), std::move(tags), std::move(options), std::move(meta), {}}) {}
             /*unode(const std::unordered_map<std::string_view, const char*>& serialized) {
                 const modoc::string_type name = serialized.contains("name") ? {serialized.at("name"), true} : {"group", false};
@@ -86,14 +92,14 @@ namespace modoc {
                 return std::get<node_type>(_value);
             }
 
-            modoc::string_type& text() {
+            text_type& text() {
                 if (!is_text()) printf("Is %zu but text was used.\n", _value.index());
-                return std::get<modoc::string_type>(_value);
+                return std::get<text_type>(_value);
             }
 
-            const modoc::string_type& text() const {
+            const text_type& text() const {
                 if (!is_text()) printf("Is %zu but text was used.\n", _value.index());
-                return std::get<modoc::string_type>(_value);
+                return std::get<text_type>(_value);
             }
 
             /*const std::string_view& text() const {
@@ -168,7 +174,7 @@ namespace modoc {
                 }
                 while (tabs < stack.size()) {
                     if (text_begin != nullptr) {
-                        stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
+                        stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy), modoc::string_type{});
                         text_begin = nullptr;
                     }
 
@@ -183,8 +189,8 @@ namespace modoc {
                 while (buffer[i] != '\n' && buffer[i] != '\0') {
                     if (buffer[i] == KEYWORD_CHAR) {
                         if (text_begin != nullptr) {
-                            if (stack.size()) stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
-                            else result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy));
+                            if (stack.size()) stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy), modoc::string_type{});
+                            else result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i - tabs}, copy), modoc::string_type{});
                             text_begin = nullptr;
                         }
 
@@ -232,13 +238,13 @@ namespace modoc {
 
             while (stack.size()) {
                 if (text_begin != nullptr) {
-                    stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy));
+                    stack.top()->node().children.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy), modoc::string_type{});
                     text_begin = nullptr;
                 }
                 stack.pop();
             }
 
-            if (text_begin != nullptr) result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy));
+            if (text_begin != nullptr) result.nodes.emplace_back(modoc::string_type(std::string_view{text_begin, buffer + i}, copy), modoc::string_type{});
 
 
             return result;

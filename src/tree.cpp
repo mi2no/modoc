@@ -58,7 +58,7 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
 
             // Handling the first child text node
             if (n->scope_end() != scope_end::START && nt.children.size() && nt.children.front().is_text()) {
-                modoc::string_type& str = nt.children.front().text();
+                modoc::string_type& str = nt.children.front().text().text;
                 const std::string_view view = str.view();
                 const char* end;
 
@@ -151,7 +151,17 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
             }
         }
     }
-    else result.insert_node(new text_node(tokenize(un.text().view(), get_var_func, copy_text))); // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
+    else {
+        text_node* txt = new text_node(tokenize(un.text().text.view(), get_var_func, copy_text)); // Maybe add a check if tokenize returns an empty vector. For instance a variable could evaluate to an empty string.
+        
+        if (un.text().meta.view().size()) {
+            options_t map;
+            parse_options(un.text().meta.view(), map, get_var_func);
+            txt->add_meta(map);
+        }
+
+        result.insert_node(txt);
+    }
     
     return result;
 }

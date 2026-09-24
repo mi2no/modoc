@@ -63,7 +63,7 @@ struct repeat_node : special_node {
 
         for (double i = from; i < to; ++i) {
             modoc::uninitialized_tree::unode u_assign = {{"assign", false}, {"", false}, {"overwrite = true", false}, {"", false}};
-            u_assign.node().children.emplace_back(std::move(modoc::string_type("i = 1", false)));
+            u_assign.node().children.emplace_back(std::move(modoc::string_type("i = 1", false)), modoc::string_type{});
             
             result.push_back(std::move(u_assign));
             result.push_back({true});
