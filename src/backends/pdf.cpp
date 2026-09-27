@@ -21,11 +21,14 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <array>
 
 #include "../node.hpp"
 #include "../nodes/code_temp.hpp"
+#include "../font/ttf.hpp"
+#include "../objects/font.hpp"
 
 namespace pdfback {
 
@@ -118,6 +121,48 @@ static const std::array<uint16_t, 95> serif_widths = {
     500,500,333,389,278,500,500,722,500,500,444,480,200,480,541 // 'p' .. '~'
 };
 
+struct font_t {
+    using value_type = std::variant<
+        const ttf_resource*,
+        std::string
+    >;
+
+    value_type data;
+
+    font_t(const ttf_resource* ttf) : data(ttf) {}
+    font_t(std::string_view name) : data(std::string(name)) {}
+
+    font_t& operator=(const ttf_resource* ttf) {
+        data = ttf;
+        return *this;
+    }
+
+    font_t& operator=(std::string_view name) {
+        data = std::string(name);
+        return *this;
+    }
+
+    static font_t unset() {
+        return font_t((ttf_resource*)nullptr);
+    }
+
+    bool is_base_font() const {
+        return data.index() == 1;
+    }
+
+    bool is_unset() const {
+        return data.index() == 0 && std::get<const ttf_resource*>(data) == nullptr;
+    }
+
+    const ttf_resource* ttf() {
+        return std::get<const ttf_resource*>(data);
+    }
+
+    std::string_view base_font() {
+        return std::get<std::string>(data);
+    }
+};
+
 static double char_width(unsigned char c, bool monospace) {
     if (c == '\t') return 2400.0;
     if (monospace) return 600.0; // Courier is fixed-pitch
@@ -126,39 +171,12 @@ static double char_width(unsigned char c, bool monospace) {
     return 500.0; // fallback for anything outside the ASCII table
 }
 
-static double text_width(std::string_view s, double size, bool monospace) {
+static double text_width_base(std::string_view s, double size, bool monospace) {
     double w = 0;
     for (unsigned char c : s) w += char_width(c, monospace);
     return w / 1000.0 * size;
 }
 
-// Greedy word-wrap. Splits only on spaces (already-encoded text).
-static std::vector<std::string> wrap_text(std::string_view s, double size, double max_width, bool monospace) {
-    std::vector<std::string> lines;
-    std::string current;
-
-    size_t pos = 0;
-    while (pos <= s.size()) {
-        size_t next = s.find(' ', pos);
-        std::string_view word = (next == std::string_view::npos) ? s.substr(pos) : s.substr(pos, next - pos);
-
-        if (!word.empty()) {
-            std::string candidate = current.empty() ? std::string(word) : current + ' ' + std::string(word);
-
-            if (!current.empty() && text_width(candidate, size, monospace) > max_width) {
-                lines.push_back(current);
-                current = word;
-            }
-            else current = candidate;
-        }
-
-        if (next == std::string_view::npos) break;
-        pos = next + 1;
-    }
-
-    if (!current.empty() || lines.empty()) lines.push_back(current);
-    return lines;
-}
 
 // ---------------------------------------------------------------------------
 // Low level PDF file assembly: indirect objects + xref + trailer.
@@ -184,6 +202,21 @@ struct pdf_writer {
     std::vector<int> page_ids;
 
     int font_serif, font_serif_bold, font_courier;
+
+    // One entry per distinct embedded TTF actually used in the document.
+    // Keyed by the ttf_resource's address (embed_font() below), so the same
+    // already-loaded font passed in from multiple call sites (e.g. several
+    // code blocks sharing one font) only gets embedded into the PDF once.
+    struct embedded_font_t {
+        const ttf_resource* font = nullptr;
+        double scale = 1.0; // font units -> PDF's 1000-unit glyph space
+        std::string resource_name; // e.g. "FEmbed0", referenced from Resources
+        int descriptor_obj = 0, descendant_obj = 0, tounicode_obj = 0, type0_obj = 0;
+        std::unordered_map<uint16_t, uint32_t> used_glyphs; // gid -> a codepoint that produced it
+    };
+
+    std::vector<embedded_font_t> embedded_fonts;
+    std::unordered_map<const ttf_resource*, size_t> embedded_font_lookup; 
 
     std::string page_stream;
     double cursor_y;
@@ -213,6 +246,152 @@ struct pdf_writer {
         return add_object(body);
     }
 
+    // Greedy word-wrap. Splits only on spaces (already-encoded text).
+    static std::vector<std::string> wrap_text(std::string_view s, font_t font, double size, double max_width, bool monospace) {
+        std::vector<std::string> lines;
+        std::string current;
+
+        size_t pos = 0;
+        while (pos <= s.size()) {
+            size_t next = s.find(' ', pos);
+            std::string_view word = (next == std::string_view::npos) ? s.substr(pos) : s.substr(pos, next - pos);
+
+            if (!word.empty()) {
+                std::string candidate = current.empty() ? std::string(word) : current + ' ' + std::string(word);
+
+                if (!current.empty() && text_width(candidate, font, size, monospace) > max_width) {
+                    lines.push_back(current);
+                    current = word;
+                }
+                else current = candidate;
+            }
+
+            if (next == std::string_view::npos) break;
+            pos = next + 1;
+        }
+
+        if (!current.empty() || lines.empty()) lines.push_back(current);
+        return lines;
+    }
+
+    // Registers `font` as an embedded Type0/Identity-H composite PDF font if
+    // it hasn't been already (keyed by the ttf_resource's address), and
+    // returns its entry. The whole TTF file goes in verbatim (no
+    // subsetting), addressed by raw glyph ID rather than by character code.
+    // /W (glyph widths) and /ToUnicode (for copy-paste / search) both depend
+    // on which glyphs actually get used, so their object bodies are only
+    // reserved here and filled in later, in finalize_embedded_fonts() once
+    // the whole document has been rendered.
+    embedded_font_t& embed_font(const ttf_resource& font) {
+        auto it = embedded_font_lookup.find(&font);
+        if (it != embedded_font_lookup.end()) return embedded_fonts[it->second];
+
+        embedded_font_t entry;
+        entry.font = &font;
+        entry.scale = 1000.0 / font.head.units_per_em;
+        entry.resource_name = "FEmbed" + std::to_string(embedded_fonts.size());
+
+        const auto& stream = font.stream;
+        std::string file_body_hex;
+        file_body_hex.reserve(stream.size() * 2);
+        for (uint8_t byte : stream) {
+            char hex[3];
+            snprintf(hex, sizeof(hex), "%02X", byte);
+            file_body_hex += hex;
+        }
+
+        int file_id = add_object(
+            "<< /Length " + std::to_string(file_body_hex.size()) +
+            " /Length1 " + std::to_string(stream.size()) + " /Filter /ASCIIHexDecode >>\nstream\n" +
+            file_body_hex + "\nendstream");
+
+        const double ascent = font.hhea.ascender * entry.scale;
+        const double descent = font.hhea.descender * entry.scale;
+        const double cap_height = font.head.units_per_em * 0.7 * entry.scale; // OS/2 not parsed yet; rough guess
+        const double bbox_x_min = font.head.x_min * entry.scale;
+        const double bbox_y_min = font.head.y_min * entry.scale;
+        const double bbox_x_max = font.head.x_max * entry.scale;
+        const double bbox_y_max = font.head.y_max * entry.scale;
+
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+            "<< /Type /FontDescriptor /FontName /%s /Flags 33"
+            " /FontBBox [%.0f %.0f %.0f %.0f] /ItalicAngle 0 /Ascent %.0f /Descent %.0f"
+            " /CapHeight %.0f /StemV 80 /FontFile2 %d 0 R >>",
+            entry.resource_name.c_str(), bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max,
+            ascent, descent, cap_height, file_id);
+        entry.descriptor_obj = add_object(buf);
+
+        entry.descendant_obj = reserve();
+        entry.tounicode_obj = reserve();
+        entry.type0_obj = add_object(
+            "<< /Type /Font /Subtype /Type0 /BaseFont /" + entry.resource_name + " /Encoding /Identity-H"
+            " /DescendantFonts [" + std::to_string(entry.descendant_obj) + " 0 R]"
+            " /ToUnicode " + std::to_string(entry.tounicode_obj) + " 0 R >>");
+
+        size_t idx = embedded_fonts.size();
+        embedded_fonts.push_back(std::move(entry));
+        embedded_font_lookup[&font] = idx;
+        return embedded_fonts[idx];
+    }
+
+    // Fills in the /W array and ToUnicode CMap that embed_font() left as
+    // placeholders for every registered font, now that every glyph actually
+    // used is known.
+    void finalize_embedded_fonts() {
+        for (embedded_font_t& e : embedded_fonts) {
+            std::string w_array = "[";
+            for (const auto& [gid, cp] : e.used_glyphs) {
+                const double w = e.font->hmtx.get_metrics(gid).advance_width * e.scale;
+                w_array += std::to_string(gid) + " [" + std::to_string((int)std::round(w)) + "] ";
+            }
+            w_array += ']';
+
+            objects[e.descendant_obj - 1] =
+                "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /" + e.resource_name +
+                " /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity-H) /Supplement 0 >>"
+                " /FontDescriptor " + std::to_string(e.descriptor_obj) + " 0 R"
+                " /CIDToGIDMap /Identity /DW " + std::to_string((int)std::round(600 * e.scale)) +
+                " /W " + w_array + " >>";
+
+            std::string cmap_body = build_tounicode_cmap(e.used_glyphs);
+
+            objects[e.tounicode_obj - 1] =
+                "<< /Length " + std::to_string(cmap_body.size()) + " >>\nstream\n" + cmap_body + "\nendstream";
+        }
+    }
+
+    // Builds a ToUnicode CMap stream body from a gid -> codepoint map.
+    static std::string build_tounicode_cmap(const std::unordered_map<uint16_t, uint32_t>& used_glyphs) {
+        std::string cmap_body =
+            "/CIDInit /ProcSet findresource begin\n"
+            "12 dict begin\n"
+            "begincmap\n"
+            "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity-H) /Supplement 0 >> def\n"
+            "/CMapName /Adobe-Identity-UCS def\n"
+            "/CMapType 2 def\n"
+            "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n";
+
+        // bfchar blocks are capped at 100 entries per PDF spec; chunk accordingly.
+        size_t count = 0;
+        std::string chunk;
+        for (const auto& [gid, cp] : used_glyphs) {
+            if (count % 100 == 0) {
+                if (count) cmap_body += chunk + "endbfchar\n";
+                chunk = "beginbfchar\n";
+            }
+
+            char line[32];
+            snprintf(line, sizeof(line), "<%04X> <%04X>\n", gid, cp > 0xFFFF ? 0xFFFDu : cp);
+            chunk += line;
+            ++count;
+        }
+        if (count) cmap_body += chunk + "endbfchar\n";
+
+        cmap_body += "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend";
+        return cmap_body;
+    }
+
     void start_page() {
         page_stream.clear();
         cursor_y = PAGE_H - MARGIN;
@@ -223,11 +402,16 @@ struct pdf_writer {
             "<< /Length " + std::to_string(page_stream.size()) + " >>\nstream\n" +
             page_stream + "\nendstream");
 
+        std::string font_dict = "<< /FSerif " + std::to_string(font_serif) + " 0 R"
+            " /FSerifB " + std::to_string(font_serif_bold) + " 0 R"
+            " /FCourier " + std::to_string(font_courier) + " 0 R";
+        for (const embedded_font_t& e : embedded_fonts)
+            font_dict += " /" + e.resource_name + " " + std::to_string(e.type0_obj) + " 0 R";
+        font_dict += " >>";
+
         std::string page_body = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " +
             std::to_string((int)PAGE_W) + ' ' + std::to_string((int)PAGE_H) + "]"
-            " /Resources << /Font << /FSerif " + std::to_string(font_serif) + " 0 R"
-            " /FSerifB " + std::to_string(font_serif_bold) + " 0 R"
-            " /FCourier " + std::to_string(font_courier) + " 0 R >> >>"
+            " /Resources << /Font " + font_dict + " >>"
             " /Contents " + std::to_string(content_id) + " 0 R >>";
 
         page_ids.push_back(add_object(page_body));
@@ -288,7 +472,17 @@ struct pdf_writer {
         page_stream += buf;
     }
 
-    void draw_text(const char* font_res, double size, double x, double y,
+    static double text_width(std::string_view s, font_t font, double size, bool monospace) {
+        if (font.is_base_font()) return text_width_base(s, size, monospace);
+        return embedded_text_width(*font.ttf(), s, size);
+    }
+
+    void draw_text(font_t font, double size, double x, double y, std::string_view text, rgb color, bool italic = false) {
+        if (font.is_base_font()) draw_text_base(font.base_font().data(), size, x, y, text, color, italic);
+        else draw_text_embedded(*font.ttf(), size, x, y, text, color, italic);
+    }
+
+    void draw_text_base(const char* font_res, double size, double x, double y,
                     std::string_view text, rgb color, bool italic = false) {
         if (text.empty()) return;
 
@@ -305,12 +499,87 @@ struct pdf_writer {
         page_stream += ") Tj ET Q\n";
     }
 
+    // Same as draw_text, but for an embedded Identity-H font: text in the
+    // content stream is raw glyph IDs (2 bytes big-endian each), not
+    // WinAnsi-encoded characters, so it goes in as a hex string (<...>)
+    // rather than a literal string. `font` is registered via embed_font() on
+    // demand (a no-op if it's already been embedded), and each codepoint's
+    // GID is looked up via its cmap and recorded, so finalize_embedded_fonts()
+    // can later build /W and /ToUnicode from exactly what got used.
+    // Tab/CR/LF are invisible whitespace, not glyphs, so tab just advances x
+    // and CR/LF are skipped outright, matching the pre-embedding behavior of
+    // moving the cursor by a fixed amount rather than drawing anything.
+    void draw_text_embedded(const ttf_resource& font, double size, double x, double y,
+                             std::string_view utf8_text, rgb color, bool italic = false) {
+        if (utf8_text.empty()) return;
+
+        embedded_font_t& e = embed_font(font);
+        const double tab_width = 4.0 * 600.0 / 1000.0 * size;
+
+        std::string hex;
+        hex.reserve(utf8_text.size() * 4);
+
+        size_t i = 0;
+        while (i < utf8_text.size()) {
+            uint32_t cp = utf8_decode(utf8_text, i);
+
+            if (cp == 0x0009) {
+                std::cout << "TAB " << tab_width << ' ' << text_width("\t", font_t(&font), size, true) << '\n';
+                x += tab_width;//text_width("\t", font_t(&font), size, true);// tab_width; 
+
+                continue; 
+            }
+            if (cp == 0x000A || cp == 0x000D) continue;
+
+            uint16_t gid = font.cmap.format_4.lookup(cp);
+            e.used_glyphs[gid] = cp;
+
+            char digits[5];
+            snprintf(digits, sizeof(digits), "%04X", gid);
+            hex += digits;
+        }
+
+        if (hex.empty()) return;
+
+        double shear = italic ? 0.25 : 0.0;
+        char buf[160];
+        snprintf(buf, sizeof(buf),
+            "q %.3f %.3f %.3f rg BT /%s %.2f Tf 1 0 %.3f 1 %.2f %.2f Tm <",
+            color.r, color.g, color.b, e.resource_name.c_str(), size, shear, x, y);
+
+        page_stream += buf;
+        page_stream += hex;
+        page_stream += "> Tj ET Q\n";
+    }
+
+    // Sum of advance widths (in text-space units, i.e. already * size / 1000)
+    // for utf8_text as rendered by `font` — the GID-based analogue of
+    // text_width() for the base-14 fonts. Doesn't need embed_font(): it's a
+    // pure metrics query, with no PDF object side effects.
+    static double embedded_text_width(const ttf_resource& font, std::string_view utf8_text, double size) {
+        const double scale = 1000.0 / font.head.units_per_em;
+        const double tab_width = 4.0 * 600.0;// / 1000.0 * size;
+
+        double w = 0;
+        size_t i = 0;
+        while (i < utf8_text.size()) {
+            uint32_t cp = utf8_decode(utf8_text, i);
+
+            if (cp == 0x0009) { w += tab_width; continue; }
+            if (cp == 0x000A || cp == 0x000D) continue;
+
+            uint16_t gid = font.cmap.format_4.lookup(cp);
+            w += font.hmtx.get_metrics(gid).advance_width * scale;
+        }
+        return w / 1000.0 * size;
+    }
+
     // Writes a paragraph, wrapping it to fit `width` starting at x_indent,
     // paging as needed. Returns the total height consumed.
-    double write_paragraph(std::string_view text, const char* font_res, double size,
+    double write_paragraph(std::string_view text, font_t font, double size,
                             double line_height, double x_indent, rgb color,
                             bool monospace, bool italic = false, bool justify = true) {
-        std::vector<std::string> lines = wrap_text(text, size, CONTENT_W - x_indent, monospace);
+        std::vector<std::string> lines = wrap_text(text, font, size, CONTENT_W - x_indent, monospace);
 
         if (justify) {
             for (size_t i = 0; i < lines.size() - 1; ++i) {
@@ -318,7 +587,7 @@ struct pdf_writer {
                 ensure_space(line_height);
                 cursor_y -= line_height;
                 
-                double words_width = text_width(line, size, monospace);
+                double words_width = text_width(line, font, size, monospace);
                 std::vector<std::string_view> words;
                 {
                     const char* word_begin = nullptr;
@@ -336,27 +605,27 @@ struct pdf_writer {
                 }
 
                 double width = 0;
-                for (std::string_view s : words) width += text_width(s, size, monospace);
+                for (std::string_view s : words) width += text_width(s, font, size, monospace);
                 std::cout << width << ' ' << words_width << '\n';
 
                 const double justify_space_width = (CONTENT_W - x_indent - width) / (words.size() - 1);
 
                 double off = MARGIN + x_indent;
                 for (const std::string_view& str : words) {
-                    draw_text(font_res, size, off, cursor_y, str, color, italic);
-                    off += text_width(str, size, monospace) + justify_space_width;
+                    draw_text(font, size, off, cursor_y, str, color, italic);
+                    off += text_width(str, font, size, monospace) + justify_space_width;
                 }
             }
 
             ensure_space(line_height);
             cursor_y -= line_height;
-            draw_text(font_res, size, MARGIN + x_indent, cursor_y, lines.back(), color, italic);
+            draw_text(font, size, MARGIN + x_indent, cursor_y, lines.back(), color, italic);
         }
         else {
             for (const std::string& line : lines) {
                 ensure_space(line_height);
                 cursor_y -= line_height;
-                draw_text(font_res, size, MARGIN + x_indent, cursor_y, line, color, italic);
+                draw_text(font, size, MARGIN + x_indent, cursor_y, line, color, italic);
             }
         }
 
@@ -364,6 +633,7 @@ struct pdf_writer {
     }
 
     std::string finish() {
+        finalize_embedded_fonts();
         end_page();
 
         int pages_id = reserve(); // object 2, filled in below
@@ -426,7 +696,7 @@ static void children_to_pdf(const node* n, pdf_writer& doc, double indent) {
     for (const node* ch : *children) node_to_pdf(ch, doc, indent);
 }
 
-static void write_sec(const sec_node* s, pdf_writer& doc, double indent) {
+static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t font) {
     std::string number = std::to_string(s->id[0]);
     for (uint8_t i = 1; i <= s->depth; ++i) {
         number += '.';
@@ -439,33 +709,40 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent) {
     doc.ensure_space(line_h + 10.0);
     doc.cursor_y -= 10.0; // spacing before heading
 
+    font_t number_font = font;
+    auto itr = s->meta.find("number.font");
+    if (itr != s->meta.end() && itr->second.type() == value::NUMBER) {
+        const size_t id = itr->second.number();
+        if (modoc::font_obj::resources.size() > id) number_font = modoc::font_obj::get_resource(id);
+    }
+
     //std::string heading = number + "   " + s->title;
     //doc.write_paragraph(to_pdf_text(heading), "FSerifB", size, line_h, indent, COLOR_HEADER, false);
 
     // TODO: replace with write_paragraph for proper wrapping
     doc.cursor_y -= line_h;
-    doc.draw_text("FSerifB", size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
-    doc.draw_text("FSerifB", size, doc.MARGIN + indent + text_width(number, size, false) + text_width("   ", size, false), doc.cursor_y, s->title, COLOR_HEADER);
+    doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
+    doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, number_font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, COLOR_HEADER);
 
     doc.cursor_y -= 4.0;
 
     children_to_pdf(s, doc, indent + 12.0);
 }
 
-static void write_list(const list_node* l, pdf_writer& doc, double indent) {
+static void write_list(const list_node* l, pdf_writer& doc, double indent, font_t font) {
     const std::vector<node*>* children = l->child_nodes();
     if (children == nullptr) return;
 
     for (const node* ch : *children) {
         doc.ensure_space(BODY_LINE);
         // Bullet, drawn at the current line's baseline.
-        doc.draw_text("FSerif", BODY_SIZE, doc.MARGIN + indent, doc.cursor_y - BODY_LINE + 3.0,
+        doc.draw_text(font, BODY_SIZE, doc.MARGIN + indent, doc.cursor_y - BODY_LINE + 3.0,
                        "-", COLOR_BULLET, false);
         node_to_pdf(ch, doc, indent + 14.0);
     }
 }
 
-static void write_code(const code_node* c, pdf_writer& doc, double indent) {
+static void write_code(const code_node* c, pdf_writer& doc, double indent, font_t font) {
     constexpr double size = 9.5, line_h = 13.0, pad = 8.0, tab_w = 4 * 600.0 / 1000.0 * size;
 
     // Pre-flatten tokens into lines so the background box height is known
@@ -517,7 +794,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     doc.cursor_y -= 6.0;
 
     std::string lang_label = "[" + c->lang + "]";
-    doc.write_paragraph(lang_label, "FCourier", size, line_h, indent, COLOR_BULLET, true);
+    doc.write_paragraph(lang_label, font, size, line_h, indent, COLOR_BULLET, true);
 
     doc.ensure_space(line_h * lines.size());
 
@@ -535,9 +812,9 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
         double x = doc.MARGIN + indent + padding;//tabs * tab_w;
 
         const std::string line_num_str = std::to_string(i + 1);
-        x += ((int)log10(lines.size()) - (int)log10(i + 1)) * text_width(" ", size, true); // right align TODO: remove log10!!!
-        doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3, line_num_str, color_line_nums);
-        x += text_width(line_num_str, size, true);
+        x += ((int)log10(lines.size()) - (int)log10(i + 1)) * doc.text_width(" ", font, size, true); // right align TODO: remove log10!!!
+        doc.draw_text(font, size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3, line_num_str, color_line_nums);
+        x += doc.text_width(line_num_str, font, size, true);
         x += 10;
 
         for (const piece& p : lines[i]) {
@@ -549,10 +826,9 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
                 default: break;//color = {.9, .9, .9};
             }*/
 
-            std::string text = to_pdf_text(p.text);
-            doc.draw_text("FCourier", size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
-                          text, p.color, italic);
-            x += text_width(text, size, true);// + text_width(" ", size, true);
+            doc.draw_text(font, size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3,
+                          p.text, p.color, italic);
+            x += doc.text_width(p.text, font, size, true);
         }
 
         doc.cursor_y -= line_h;
@@ -561,7 +837,7 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent) {
     doc.cursor_y -= 6.0;
 }
 
-static void write_text(const text_node* t, pdf_writer& doc, double indent) {
+static void write_text(const text_node* t, pdf_writer& doc, double indent, font_t font, double font_size) {
     std::string joined;
     for (const modoc::string_type& s : t->tokens) {
         joined += to_pdf_text(s.view());
@@ -569,23 +845,64 @@ static void write_text(const text_node* t, pdf_writer& doc, double indent) {
     }
     if (!joined.empty()) joined.pop_back();
 
-    doc.write_paragraph(joined, "FSerif", BODY_SIZE, BODY_LINE, indent, COLOR_TEXT, false);
+    doc.write_paragraph(joined, font, font_size, BODY_LINE, indent, COLOR_TEXT, false);
     doc.cursor_y -= 4.0; // paragraph spacing
 }
 
 static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
-    if (node::is_type<sec_node>(n)) write_sec((const sec_node*)n, doc, indent);
-    else if (node::is_type<list_node>(n)) write_list((const list_node*)n, doc, indent);
+    font_t font = font_t::unset();
+
+    auto itr = n->meta.find("font");
+    std::cout << "Font found: " << (itr != n->meta.end()) << '\n';
+    if (itr != n->meta.end() && itr->second.type() == value::NUMBER) {
+        size_t id = itr->second.number();
+        if (modoc::font_obj::resources.size() > id) font = modoc::font_obj::get_resource(id);
+        std::cout << "Resources: " << modoc::font_obj::resources.size() << '\n'; 
+    }
+
+    double font_size = BODY_SIZE;
+    itr = n->meta.find("font.size");
+    if (itr != n->meta.end() && itr->second.type() == value::NUMBER) font_size *= itr->second.number();
+
+    std::string m;
+    for (auto entry : n->meta) {
+        m += '[';
+        m += entry.first;
+        m += " : ";
+        m += entry.second.to_string();
+        m += ']';
+    }
+    std::cout << "Meta: " << m << " type: ";
+
+    if (node::is_type<sec_node>(n)) {
+        std::cout << "sec\n";
+        if (font.is_unset()) font = "FSerifB";
+        write_sec((const sec_node*)n, doc, indent, font);
+    }
+    else if (node::is_type<list_node>(n)) {
+        std::cout << "list\n";
+        if (font.is_unset()) font = "FSerif";
+        write_list((const list_node*)n, doc, indent, font);
+    }
     else if (node::is_type<group_node>(n)) children_to_pdf(n, doc, indent);
-    else if (node::is_type<code_node>(n)) write_code((const code_node*)n, doc, indent);
-    else if (node::is_type<text_node>(n)) write_text((const text_node*)n, doc, indent);
+    else if (node::is_type<code_node>(n)) {
+        std::cout << "code\n";
+        if (font.is_unset()) font = "FCourier";
+        std::cout << "Font set : " << !font.is_unset() << "\n";
+        write_code((const code_node*)n, doc, indent, font);
+    }
+    else if (node::is_type<text_node>(n)) {
+        std::cout << "text\n";
+        if (font.is_unset()) font = "FSerif";
+        write_text((const text_node*)n, doc, indent, font, font_size);
+    }
     // Anything else (plugin-defined nodes) is expected to already have been
     // lowered to one of the above by the time it reaches a backend.
 
-    auto itr = n->meta.find("caption");
+    itr = n->meta.find("caption");
     if (itr != n->meta.end() && itr->second.type() == value::STRING) {
-        const double padding = (doc.CONTENT_W - text_width(itr->second.string(), BODY_SIZE, false)) / 2;
-        doc.write_paragraph(itr->second.string(), "FSerif", BODY_SIZE, BODY_LINE, padding, COLOR_TEXT, false);
+        const double padding = (doc.CONTENT_W - doc.text_width(itr->second.string(), font, BODY_SIZE, false)) / 2;
+        doc.write_paragraph(itr->second.string(), font, BODY_SIZE, BODY_LINE, padding, COLOR_TEXT, false);
         doc.cursor_y -= 4.0;
     }
 }
@@ -594,6 +911,11 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
 
 extern "C" void compile(const std::vector<node*>& tree) {
     pdfback::pdf_writer doc;
+
+    // TODO: wire this up to wherever fonts actually come from (a registry,
+    // per-node meta, ...) — hardcoded here only as a placeholder so
+    // write_code() has a ttf_resource to embed.
+    ttf_resource code_font = load_ttf("font/JetBrainsMono/static/JetBrainsMono-Regular.ttf");
 
     for (const node* n : tree)
         pdfback::node_to_pdf(n, doc, 0.0);

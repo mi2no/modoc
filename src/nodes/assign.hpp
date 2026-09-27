@@ -85,7 +85,7 @@ struct assign_node : special_node {
 };
 
 struct assign_f : node_factory {
-    node* instance(uint8_t depth, const options_t& op) override {
+    node* instance(modoc::tree& parent, uint8_t depth, const options_t& op) override {
         bool overwrite = false;
         if (op.contains("overwrite")) {
             const value& v = op.at("overwrite");

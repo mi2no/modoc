@@ -267,6 +267,18 @@ namespace modoc {
             else return nullptr;
         }
 
+        const value* get_variable(std::string_view _name, value::type_e type) const { // TODO: replace single type with bit mask
+            std::string name = std::string(_name);
+            const value* v = nullptr;
+            
+            if (variables.contains(name)) v = &variables.at(name).back().v;
+            else if (parent_tree != nullptr) v = parent_tree->get_variable(_name, type);
+            
+            if (v != nullptr && v->type() != type) v = nullptr;
+
+            return v;
+        }
+
         void combine(modoc::tree&& tree); 
         void insert_node(node* n);
 

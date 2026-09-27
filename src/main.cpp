@@ -30,6 +30,9 @@
 #include "nodes/if.hpp"
 #include "nodes/math.hpp"
 #include "nodes/code_temp.hpp"
+#include "nodes/title.hpp"
+
+#include "objects/font.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -179,8 +182,11 @@ int main(int argc, char** argv) {
     register_node_factory("meta", new meta_f());
     register_node_factory("assign", new assign_f());
     register_node_factory("new_code", new new_code_f());
+    register_node_factory("title", new title_f());
 
     register_node_factory("math", new math_f());
+
+    modoc::font_obj::init();
 
     printf("Node factories: %zu\n", node_factories.size());
     for (auto entry : node_factories) entry.second->init();

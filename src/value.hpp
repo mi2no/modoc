@@ -467,7 +467,7 @@ struct value {
                     const object_t& obj = ref->object();
                     auto it = obj.find(name);
 
-                    s += '-';
+                    s += "->";
                     s += name;
                     if (it != obj.end()) {
                         ref = &it->second;
