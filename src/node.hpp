@@ -153,6 +153,20 @@ struct text_node : node {
         for (modoc::string_type& s : new_tokens) tokens.push_back(std::move(s));
     }
 
+    virtual const value* get_meta(std::string_view name) const override {
+        const value* ptr = node::get_meta(name);
+        if (ptr != nullptr) return ptr;
+
+        ptr = parent->get_variable("theme");
+        if (ptr != nullptr && ptr->type() == value::OBJECT) {
+            const value::object_t& obj = ptr->object();
+
+            if (name == "color" && obj.contains_type("text", value::NUMBER)) return &obj.at("text");
+        }
+
+        return nullptr;
+    }
+
     const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
@@ -300,7 +314,8 @@ struct sec_node : public group_node {
         if (ptr != nullptr && ptr->type() == value::OBJECT) {
             const value::object_t& obj = ptr->object();
 
-            if (name == "color" && obj.contains("color1")) return &obj.at("color1"); 
+            if (name == "color" && obj.contains_type("text2", value::NUMBER)) return &obj.at("text2"); 
+            else if (name == "number.color" && obj.contains_type("text1", value::NUMBER)) return &obj.at("text1"); 
         }
 
         return nullptr;

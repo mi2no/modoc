@@ -704,11 +704,14 @@ static void children_to_pdf(const node* n, pdf_writer& doc, double indent) {
 }
 
 static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t font) {
-    rgb color = COLOR_HEADER;
+    rgb color = COLOR_HEADER, number_color = COLOR_HEADER;
 
     {
         const value* ptr = s->get_meta("color");
         if (ptr != nullptr && ptr->type() == value::NUMBER) color = rgb::from_uint(ptr->number());
+
+        ptr = s->get_meta("number.color");
+        if (ptr != nullptr && ptr->type() == value::NUMBER) number_color = rgb::from_uint(ptr->number());
     }
 
     std::string number = std::to_string(s->id[0]);
@@ -735,7 +738,7 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t 
 
     // TODO: replace with write_paragraph for proper wrapping
     doc.cursor_y -= line_h;
-    doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
+    doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, number_color);
     doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, number_font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, color);
 
     doc.cursor_y -= 4.0;
@@ -765,8 +768,8 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent, font_
     std::vector<std::vector<piece>> lines;
     uint8_t tabs = 0;
 
-    const rgb color_background = rgb::from_uint(c->meta.at("theme").object().at("background").number());
-    const rgb color_line_nums = rgb::from_uint(c->meta.at("theme").object().at("lineNumbers").number());
+    const rgb color_background = rgb::from_uint(c->get_meta("background")->number());//c->meta.at("theme").object().at("background").number());
+    const rgb color_line_nums = rgb::from_uint(c->get_meta("lineNumbers")->number());//c->meta.at("theme").object().at("lineNumbers").number());
 
     const double padding = c->meta.at("padding").number();
 
@@ -852,6 +855,13 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent, font_
 }
 
 static void write_text(const text_node* t, pdf_writer& doc, double indent, font_t font, double font_size) {
+    rgb color = COLOR_TEXT;
+
+    {
+        const value* ptr = t->get_meta("color");
+        if (ptr != nullptr && ptr->type() == value::NUMBER) color = rgb::from_uint(ptr->number());
+    }
+
     std::string joined;
     for (const modoc::string_type& s : t->tokens) {
         joined += to_pdf_text(s.view());
@@ -859,7 +869,7 @@ static void write_text(const text_node* t, pdf_writer& doc, double indent, font_
     }
     if (!joined.empty()) joined.pop_back();
 
-    doc.write_paragraph(joined, font, font_size, BODY_LINE, indent, COLOR_TEXT, false);
+    doc.write_paragraph(joined, font, font_size, BODY_LINE, indent, color, false);
     doc.cursor_y -= 4.0; // paragraph spacing
 }
 

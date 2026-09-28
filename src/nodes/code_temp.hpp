@@ -18,7 +18,6 @@ struct code_node : node {
         token_type type = NONE;
         uint32_t color;
 
-        token_t(std::string_view str, token_type type) : str(str), type(type), color(argb(type)) {}
         token_t(std::string_view str, token_type type, uint32_t color) : str(str), type(type), color(color) {}
     };
 
@@ -66,20 +65,32 @@ struct code_node : node {
         }*/
     }
 
-    static uint32_t argb(uint8_t type, value::object_t* theme = nullptr) {
+    struct theme {
+        uint32_t background; // Base
+        uint32_t lineNumbers; // Overlay 1
+        uint32_t text; // Text
+        uint32_t keywords; // Mauve
+        uint32_t types; // Yellow
+        uint32_t operators; // Sky
+        uint32_t numbers; // Peach
+        uint32_t strings; // Green
+        uint32_t functions; // Blue
+    };
+
+    static uint32_t argb(uint8_t type, const theme& t) {
         switch (type) {
-            case KEYWORD: return theme == nullptr ? 0xFF8839ef : theme->at("keyword").number();
-            case TYPE: return theme == nullptr ? 0xFFdf8e1d : theme->at("type").number();
-            case OPERATOR: return theme == nullptr ? 0xFF04a5e5 : theme->at("operator").number();
-            case NUMBER: return theme == nullptr ? 0xFFfe640b : theme->at("number").number();
-            case STRING: return theme == nullptr ? 0xFF40a02b : theme->at("string").number();
-            case FUNCTION: return theme == nullptr ? 0xFF1e66f5 : theme->at("function").number();
+            case KEYWORD: return t.keywords; 
+            case TYPE: return t.types;
+            case OPERATOR: return t.operators;
+            case NUMBER: return t.numbers;
+            case STRING: return t.strings;
+            case FUNCTION: return t.functions;
         }
-        return theme == nullptr ? 0xFF4c4f69 : theme->at("text").number();
+        return t.text;
     }
 
     //TODO: Could be combined with lsp modoc tokenize????
-    static token_t tokenize_value(std::string_view str, value::object_t* theme = nullptr) {
+    static token_t tokenize_value(std::string_view str, const theme& theme) {
         static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "uint16_t"};
         static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include"};
 
@@ -130,7 +141,7 @@ struct code_node : node {
         return {{str.data(), str.data() + len}, (token_type)type, argb(type, theme)};
     }
 
-    static std::vector<token_t> tokenize(std::string_view str, value::object_t* theme = nullptr) {
+    static std::vector<token_t> tokenize(std::string_view str, const theme& theme) {
         std::vector<token_t> result;
         const char* begin = nullptr;
 
@@ -151,7 +162,7 @@ struct code_node : node {
                 result.push_back(t);
                 ptr += t.str.size() - 1;
             }
-            else if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL);
+            else if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL, 0);
         }
 
         if (begin != nullptr) {
@@ -203,17 +214,37 @@ struct code_node : node {
 
         return result;
     }
+
+    theme get_theme() const {
+        const value* ptr = get_meta("theme");
+        if (ptr == nullptr) ptr = parent->get_variable("theme");
+
+        theme t;
+
+        if (ptr != nullptr && ptr->type() == value::OBJECT) {
+            const value::object_t& obj = ptr->object();
+
+            t.background = obj.at("background").number();
+            t.numbers = obj.at("color7").number();
+            t.keywords = obj.at("color4").number();
+            t.functions = obj.at("color13").number();
+            t.operators = obj.at("color11").number();
+            t.lineNumbers = obj.at("text4").number();
+            t.strings = obj.at("color9").number();
+            t.types = obj.at("color8").number();
+            t.text = obj.at("text").number();
+        }
+
+        return t;
+    }
     
     void parse_verbatim(std::string_view str, bool to_copy) override {
-        if (!meta.contains("theme")) meta["theme"] = constants.at("code").object().at("theme").object().at("latte");
-        modoc::logger::s_log("code", "meta", this->meta.at("theme").to_string());
-
         if (!meta.contains("padding")) meta["padding"] = 6;
 
         modoc::logger::s_log("code", "verbatim", str);
         content = str;
 
-        tokens = tokenize(content, &meta["theme"].object());
+        tokens = tokenize(content, get_theme());
         
         std::string result;
         for (auto& t : tokens) {
@@ -224,6 +255,22 @@ struct code_node : node {
             result += ')';
         }
         modoc::logger::s_log("code", "verbatim", result);
+    }
+
+    virtual const value* get_meta(std::string_view name) const override {
+        const value* ptr = node::get_meta(name);
+        if (ptr != nullptr) return ptr;
+
+        ptr = parent->get_variable("theme");
+
+        if (ptr != nullptr && ptr->type() == value::OBJECT) {
+            const value::object_t& obj = ptr->object();
+
+            if (name == "background" && obj.contains_type("background1", value::NUMBER)) return &obj.at("background1");
+            else if (name == "lineNumbers" && obj.contains_type("surface1", value::NUMBER)) return &obj.at("surface1");
+        }
+
+        return nullptr;
     }
 
     /*virtual void debug_print() const override {
@@ -247,41 +294,10 @@ struct code_node : node {
 };
 
 struct code_f : node_factory {
-    static value::object_t themes() {
-        value::object_t map;
-
-        map["latte"] = value::from_object({
-            {"background", 0xFFeff1f5}, // Base
-            {"lineNumbers", 0xFF8c8fa1}, // Overlay 1
-            {"text", 0xFF4c4f69}, // Text
-            {"keyword", 0xFF8839ef}, // Mauve
-            {"type", 0xFFdf8e1d}, // Yellow
-            {"operator", 0xFF04a5e5}, // Sky
-            {"number", 0xFFfe640b}, // Peach
-            {"string", 0xFF40a02b}, // Green
-            {"function", 0xFF1e66f5} // Blue
-        });
-
-        map["frappe"] = value::from_object({
-            {"background", 0xFF303446}, // Base
-            {"lineNumbers", 0xFF838ba7}, // Overlay 1
-            {"text", 0xFFc6d0f5}, // Text
-            {"keyword", 0xFFca9ee6}, // Mauve
-            {"type", 0xFFe5c890}, // Yellow
-            {"operator", 0xFF99d1db}, // Sky
-            {"number", 0xFFef9f76}, // Peach
-            {"string", 0xFFa6d189}, // Green
-            {"function", 0xFF8caaee} // Blue
-        });
-
-        return map;
-    }
 
     void init() override {
         value obj = value::from_object({});
         value::object_t& map = obj.object();
-
-        map["theme"] = value::from_object(themes());
 
         {
             map["lang"] = value::from_object({

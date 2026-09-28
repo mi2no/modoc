@@ -65,6 +65,21 @@ struct value {
             if (itr == end()) return false;
             return itr->second.type() == type;
         }
+
+        template <typename T>
+        const T& get(std::string_view name, const T& default_value) const {
+            auto itr = find(name);
+
+            if (itr == end()) return default_value;
+
+            const value& v = itr->second;
+            if constexpr (std::is_same_v<T, double>) return v.type() == value::NUMBER ? v.number() : default_value; 
+            //else if constexpr (std::is_same_v<T, std::string>) return v.type() == value::NUMBER ? v.number() : default_value;
+            //
+
+
+            return default_value;
+        }
     };
     
     using function_t = std::function<value(const object_t&)>;
