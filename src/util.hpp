@@ -7,7 +7,7 @@
 
 namespace modoc {
 
-    std::span<uint8_t> read_file(std::string_view path) {
+    static std::span<uint8_t> read_file(std::string_view path) {
         FILE* file = fopen(path.data(), "r");
        
         fseek(file, 0, SEEK_END);

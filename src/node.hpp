@@ -25,6 +25,8 @@ struct node {
     /*std::map<std::string_view, value>*/ value::object_t meta;
     std::unordered_set<std::string_view> tags;
 
+    modoc::tree* parent = nullptr;
+
     virtual const char* type() const = 0;
     virtual uint8_t scope_end() = 0;
 
@@ -52,6 +54,11 @@ struct node {
     virtual void add_meta(const options_t& meta) {
         for (const auto& entry : meta)
             this->meta[std::string(entry.first)] = entry.second; // TODO: replace std::string width std::string_view - somehow
+    }
+
+    virtual const value* get_meta(std::string_view name) const {
+        auto itr = meta.find(name);
+        return itr != meta.end() ? &itr->second : nullptr;
     }
     /*virtual void add_meta(const std::vector<std::pair<std::string_view, value>>& entires) {
         for (const std::)
@@ -281,6 +288,22 @@ struct sec_node : public group_node {
             _subtree.nodes.back()->parse_tokens(std::move(new_tokens), tabs);
         else
             _subtree.nodes.push_back(new text_node(std::move(new_tokens)));
+    }
+
+
+    const value* get_meta(std::string_view name) const override {
+        const value* ptr = node::get_meta(name);
+        if (ptr != nullptr) return ptr;
+
+        ptr = parent->get_variable("theme");
+
+        if (ptr != nullptr && ptr->type() == value::OBJECT) {
+            const value::object_t& obj = ptr->object();
+
+            if (name == "color" && obj.contains("color1")) return &obj.at("color1"); 
+        }
+
+        return nullptr;
     }
 
     /*void add_node(node* n) override {

@@ -221,7 +221,9 @@ struct pdf_writer {
     std::string page_stream;
     double cursor_y;
 
-    pdf_writer() {
+    rgb background = {1, 1, 1};
+
+    pdf_writer(rgb background = {1, 1, 1}) : background(background) {
         font_serif = add_font("Times-Roman");
         font_serif_bold = add_font("Times-Bold");
         font_courier = add_font("Courier");
@@ -395,6 +397,11 @@ struct pdf_writer {
     void start_page() {
         page_stream.clear();
         cursor_y = PAGE_H - MARGIN;
+
+        if (background.r != 1 || background.g != 1 || background.b != 1) {
+            std::cout << "draw rect\n";
+            draw_rect(0, 0, PAGE_W, PAGE_H, background); 
+        }
     }
 
     void end_page() {
@@ -697,6 +704,13 @@ static void children_to_pdf(const node* n, pdf_writer& doc, double indent) {
 }
 
 static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t font) {
+    rgb color = COLOR_HEADER;
+
+    {
+        const value* ptr = s->get_meta("color");
+        if (ptr != nullptr && ptr->type() == value::NUMBER) color = rgb::from_uint(ptr->number());
+    }
+
     std::string number = std::to_string(s->id[0]);
     for (uint8_t i = 1; i <= s->depth; ++i) {
         number += '.';
@@ -722,7 +736,7 @@ static void write_sec(const sec_node* s, pdf_writer& doc, double indent, font_t 
     // TODO: replace with write_paragraph for proper wrapping
     doc.cursor_y -= line_h;
     doc.draw_text(number_font, size, doc.MARGIN + indent, doc.cursor_y, number, COLOR_HEADER);
-    doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, number_font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, COLOR_HEADER);
+    doc.draw_text(font, size, doc.MARGIN + indent + doc.text_width(number, number_font, size, false) + doc.text_width("   ", font, size, false), doc.cursor_y, s->title, color);
 
     doc.cursor_y -= 4.0;
 
@@ -909,15 +923,27 @@ static void node_to_pdf(const node* n, pdf_writer& doc, double indent) {
 
 } // namespace pdfback
 
-extern "C" void compile(const std::vector<node*>& tree) {
-    pdfback::pdf_writer doc;
+extern "C" void compile(const modoc::tree& tree) {
+    pdfback::rgb background = {1, 1, 1};
+
+    {
+        const value* ptr = tree.get_variable("theme");
+        
+        if (ptr != nullptr && ptr->type() == value::OBJECT) {
+            const value::object_t& obj = ptr->object();
+
+            if (obj.contains_type("background", value::NUMBER)) background = pdfback::rgb::from_uint(obj.at("background").number());
+        }
+    }
+
+    pdfback::pdf_writer doc(background);
 
     // TODO: wire this up to wherever fonts actually come from (a registry,
     // per-node meta, ...) — hardcoded here only as a placeholder so
     // write_code() has a ttf_resource to embed.
     ttf_resource code_font = load_ttf("font/JetBrainsMono/static/JetBrainsMono-Regular.ttf");
 
-    for (const node* n : tree)
+    for (const node* n : tree.nodes)
         pdfback::node_to_pdf(n, doc, 0.0);
 
     std::string result = doc.finish();

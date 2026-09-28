@@ -43,6 +43,7 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
 
         //printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
         node* n = node_factories.at(nt.node_name.view())->instance(result, depth, map);
+        n->parent = &result;
 
         if (n != nullptr) {
             {
@@ -189,6 +190,7 @@ void modoc::tree::combine(modoc::tree&& tree) {
     memcpy(nodes.data() + prev_size, tree.nodes.data(), sizeof(node*) * tree.nodes.size());*/
 
     for (node* n : tree.nodes) {
+        n->parent = this;
         modoc::tree* subtree = n->subtree(); 
         if (subtree != nullptr) subtree->parent_tree = this;
     }
@@ -206,6 +208,7 @@ void modoc::tree::combine(modoc::tree&& tree) {
 }
 
 void modoc::tree::insert_node(node* n) {
+    n->parent = this;
     nodes.push_back(n);
 
     modoc::tree* subtree = n->subtree();

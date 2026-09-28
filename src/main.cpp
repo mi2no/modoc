@@ -33,6 +33,7 @@
 #include "nodes/title.hpp"
 
 #include "objects/font.hpp"
+#include "objects/themes/theme.hpp"
 
 
 /*void handle_math(const char* const& buffer, size_t& i, std::string& s) {
@@ -69,7 +70,7 @@ double to_doc(const modoc::tree& tree, const char* backend_path) {
         fputs("Error 1\n", stderr);
     }
 
-    typedef void(*func_t)(const std::vector<node*>&);
+    typedef void(*func_t)(const modoc::tree&);
 
     func_t f_handle = (func_t)dlsym(handle, "compile");
 
@@ -78,7 +79,7 @@ double to_doc(const modoc::tree& tree, const char* backend_path) {
     }
 
     const auto start = std::chrono::high_resolution_clock::now();
-    f_handle(tree.nodes);
+    f_handle(tree);
 
     return (std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start)).count();
 }
@@ -187,6 +188,7 @@ int main(int argc, char** argv) {
     register_node_factory("math", new math_f());
 
     modoc::font_obj::init();
+    modoc::theme::init();
 
     printf("Node factories: %zu\n", node_factories.size());
     for (auto entry : node_factories) entry.second->init();

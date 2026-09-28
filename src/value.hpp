@@ -56,7 +56,17 @@ struct value {
         value_data() : boolean(false) {}
     } data;*/
 
-    using object_t = std::map<std::string, value, std::less<>>;
+    struct object_t : public std::map<std::string, value, std::less<>> {
+        using std::map<std::string, value, std::less<>>::map;
+
+        bool contains_type(std::string_view name, uint8_t type) const {
+            auto itr = find(name);
+
+            if (itr == end()) return false;
+            return itr->second.type() == type;
+        }
+    };
+    
     using function_t = std::function<value(const object_t&)>;
 
     using value_type = std::variant<

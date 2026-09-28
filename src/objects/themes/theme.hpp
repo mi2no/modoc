@@ -54,6 +54,7 @@ namespace modoc {
 
         static void init() {
             std::filesystem::directory_iterator itr("objects/themes");
+            value::object_t theme_obj;
 
             for (auto entry : itr) {
                 if (entry.is_regular_file() && entry.path().extension() == ".json") {
@@ -69,11 +70,13 @@ namespace modoc {
 
                         obj[std::string(map_entry.first)] = std::move(t.to_value());
                     }
-                    register_constant(entry.path().stem().string(), value::from_object(std::move(obj)));
+                    theme_obj[entry.path().stem().string()] = value::from_object(std::move(obj));
 
                     delete[] buffer.data();
                 }
             }
+
+            register_constant("theme", value::from_object(std::move(theme_obj)));
         }  
     };
 }
