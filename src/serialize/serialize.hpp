@@ -109,6 +109,47 @@ struct has_from_string<T,
         >
     > {};
 
+static std::string handle_escape_chars(std::string_view str) {
+    std::string result;
+
+    const char* begin = str.data();
+    for (const char* ptr = begin; ptr < str.end(); ++ptr) {
+        if (*ptr == '\\') {
+            if (ptr != begin) result += std::string_view{begin, ptr};
+
+            if (++ptr < str.end()) {
+                switch (*ptr) {
+                    case 'n':
+                        result += '\n';
+                        break;
+                    case 't':
+                        result += '\t';
+                        break;
+                    case 'b':
+                        result += '\b';
+                        break;
+                    case '"':
+                        result += '"';
+                        break;
+                    case '\\':
+                        result += '\\';
+                        break;
+                    /*case 'u':
+                        final int codePoint = Integer.parseInt(s.subSequence(i + 1, i + 5).toString(), 16);
+                        sb.append(Character.toChars(codePoint));
+                        i += 4;*/
+                }
+            }
+
+            begin = ptr + 1;
+        }
+    }
+
+    if (begin < str.end()) result += std::string_view{begin, str.end()};
+
+    return result;
+}
+
 namespace json {
     template <class T, typename... fields>
     static std::string serialize_fields(/*uint8_t* src,*/ const T& a, field_list<fields...>);
@@ -222,7 +263,7 @@ namespace json {
                     ++len;
                 };
                 
-                a = std::string{begin, len};
+                a = handle_escape_chars({begin, len});
                 //new (&(a.*fields::member)) std::string{begin, len};
                 begin += len;
             } 
