@@ -794,9 +794,11 @@ static void write_code(const code_node* c, pdf_writer& doc, double indent, font_
                 if (lines.empty()) lines.push_back({});
                 lines.back().push_back({t->str, rgb::from_uint(t->color)});
             }
-            
-            ptr = t->str.end();
-            ++t;
+        
+            do {
+                ptr = t->str.end();
+                ++t;
+            } while (ptr > t->str.data());
         }
         else {
             if (lines.empty()) lines.push_back({});

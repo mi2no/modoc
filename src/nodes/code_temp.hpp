@@ -10,15 +10,16 @@ struct code_node : node {
     inline static uint32_t t_id;
 
     enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION
+        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY
     };
 
     struct token_t {
         std::string_view str;
         token_type type = NONE;
         uint32_t color;
+        bool italic = false;
 
-        token_t(std::string_view str, token_type type, uint32_t color) : str(str), type(type), color(color) {}
+        token_t(std::string_view str, token_type type, uint32_t color, bool italic = false) : str(str), type(type), color(color), italic(italic) {}
     };
 
     std::string content;
@@ -75,9 +76,14 @@ struct code_node : node {
         uint32_t numbers; // Peach
         uint32_t strings; // Green
         uint32_t functions; // Blue
+        uint32_t macros; // Mauve
+        uint32_t comments; // Overlay 2
+        uint32_t parameters; // Maroon
+        uint32_t classes; // Yellow
+        uint32_t properties; // Lavender
     };
 
-    static uint32_t argb(uint8_t type, const theme& t) {
+    static uint32_t argb(uint8_t type, const theme& t) { // TODO: remove this
         switch (type) {
             case KEYWORD: return t.keywords; 
             case TYPE: return t.types;
@@ -85,14 +91,15 @@ struct code_node : node {
             case NUMBER: return t.numbers;
             case STRING: return t.strings;
             case FUNCTION: return t.functions;
+            case COMMENT: return t.comments;
         }
         return t.text;
     }
 
     //TODO: Could be combined with lsp modoc tokenize????
-    static token_t tokenize_value(std::string_view str, const theme& theme) {
+    static size_t tokenize_value(std::vector<token_t>& tokens, std::string_view str, const theme& theme) {
         static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "uint16_t"};
-        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include"};
+        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include", "struct", "class", "template", "typename"};
 
         const char* ptr = str.data();
         uint8_t type = NONE;
@@ -112,6 +119,38 @@ struct code_node : node {
             
             type = STRING;
             len = ptr - begin;
+        }
+        else if (ptr + 1 < str.end() && ptr[0] == '/' && ptr[1] == '/') {
+            const char* const begin = ptr;
+            ptr += 2;
+
+            while (ptr < str.end() && *ptr != '\n') ++ptr;
+
+            len = ptr - begin;
+
+            tokens.emplace_back(std::string_view{str.data(), str.data() + len}, COMMENT, theme.comments, true);
+            return len;
+        }
+        else if (ptr + 1 < str.end() && ptr[0] == '/' && ptr[1] == '*') {
+            const char* begin = ptr;
+            ptr += 2;
+
+            while (ptr < str.end()) {
+                if (*ptr == '\n') {
+                    tokens.emplace_back(std::string_view{begin, ptr}, COMMENT, theme.comments, true);
+                    tokens.emplace_back(std::string_view{ptr, ptr + 1}, NEWL, 0);
+                    begin = ptr + 1; 
+                }
+                else if (ptr + 1 < str.end() && ptr[0] == '*' && ptr[1] == '/') {
+                    ++ptr;
+                    break;
+                }
+                ++ptr;
+            }
+
+            if (begin < ptr) tokens.emplace_back(std::string_view{begin, ptr}, COMMENT, theme.comments, true);
+
+            return ptr - str.data();
         }
         else if (modoc::operator_chars.contains(*ptr)) {
             type = NONE;
@@ -138,7 +177,22 @@ struct code_node : node {
             }
         }
 
-        return {{str.data(), str.data() + len}, (token_type)type, argb(type, theme)};
+        tokens.emplace_back(std::string_view{str.data(), str.data() + len}, (token_type)type, argb(type, theme));
+        return len;
+    }
+
+    static token_t get_token(std::string_view type, std::string_view token_str, const theme& theme) {
+        if (type == "keyword") return {token_str, KEYWORD, theme.keywords};
+        else if (type == "operator") return {token_str, OPERATOR, theme.operators};
+        else if (type == "function") return {token_str, FUNCTION, theme.functions};
+        else if (type == "type") return {token_str, TYPE, theme.types};
+        else if (type == "comment") return {token_str, COMMENT, theme.comments};
+        else if (type == "macro") return {token_str, MACRO, theme.macros};
+        else if (type == "parameter") return {token_str, PARAMETER, theme.parameters};
+        else if (type == "class") return {token_str, CLASS, theme.classes};
+        else if (type == "property") return {token_str, PROPERTY, theme.properties};
+
+        return {token_str, NONE, theme.text};
     }
 
     static std::vector<token_t> tokenize(std::string_view str, const theme& theme) {
@@ -157,17 +211,15 @@ struct code_node : node {
                 begin = nullptr;
             }*/
             if (*ptr > ' ' /*&& !modoc::operator_chars.contains(*ptr)*/) {
-                const token_t t = tokenize_value({ptr, str.end()}, theme);
-                std::cout << t.str << '\n';
-                result.push_back(t);
-                ptr += t.str.size() - 1;
+                ptr += tokenize_value(result, {ptr, str.end()}, theme) - 1;
+                std::cout << result.back().str << '\n';
             }
             else if (*ptr == '\n') result.emplace_back(std::string_view{ptr, ptr + 1}, NEWL, 0);
         }
 
         if (begin != nullptr) {
             const std::string_view view = {begin, str.end()};
-            result.push_back(tokenize_value(view, theme));
+            tokenize_value(result, view, theme);
             
             /*if (types.contains(view)) result.emplace_back(view, TYPE);
             else if (keywords.contains(view)) result.emplace_back(view, KEYWORD);
@@ -192,22 +244,19 @@ struct code_node : node {
             while (itr1 < result.end() && itr2 < tokens.end()) {
                 if (itr2->str.begin() < itr1->str.begin()) {
                     std::cout << '<' << itr1->str << ' ' << itr2->str << '\n';
-                    if (lsp.token_types[itr2->type_id] == "function") itr1 = result.insert(itr1, token_t{itr2->str, FUNCTION, argb(FUNCTION, theme)});
-                    else if (lsp.token_types[itr2->type_id] == "operator") itr1 = result.insert(itr1, token_t{itr2->str, OPERATOR, argb(OPERATOR, theme)});
+                    itr1 = result.insert(itr1, get_token(lsp.token_types[itr2->type_id], itr2->str, theme));
                     ++itr2;
                 }
                 else if (itr2->str.begin() == itr1->str.begin()) {
                     std::cout << '=' << itr1->str << ' ' << itr2->str << '\n';
-                    if (lsp.token_types[itr2->type_id] == "function") *itr1 = {itr2->str, FUNCTION, argb(FUNCTION, theme)};
-                    else if (lsp.token_types[itr2->type_id] == "operator") *itr1 = {itr2->str, OPERATOR, argb(OPERATOR, theme)};
+                    *itr1 = get_token(lsp.token_types[itr2->type_id], itr2->str, theme);
                     ++itr2;
                 }
                 ++itr1;
             }
 
             while (itr2 < tokens.end()) {
-                if (lsp.token_types[itr2->type_id] == "function") result.emplace_back(itr2->str, FUNCTION, argb(FUNCTION, theme));
-                else if (lsp.token_types[itr2->type_id] == "operator") result.emplace_back(itr2->str, OPERATOR, argb(OPERATOR, theme));
+                result.push_back(get_token(lsp.token_types[itr2->type_id], itr2->str, theme));
                 ++itr2;
             }
         }
@@ -233,6 +282,11 @@ struct code_node : node {
             t.strings = obj.at("color9").number();
             t.types = obj.at("color8").number();
             t.text = obj.at("text").number();
+            t.macros = t.keywords;
+            t.comments = obj.at("text5").number();
+            t.parameters = obj.at("color6").number();
+            t.classes = t.types;
+            t.properties = obj.at("color14").number();
         }
 
         return t;

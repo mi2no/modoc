@@ -172,12 +172,13 @@ namespace json {
                 const char* const end = value.data() + value.size();
 
                 for (const char* ptr = begin; ptr < end; ++ptr) {
-                    if (*ptr < ' ' || *ptr == '"') {
+                    if (*ptr < ' ' || *ptr == '"' || *ptr == '\\') {
                         result += std::string_view{begin, ptr};
                        
                         if (*ptr == '\n') result += "\\n";
                         else if (*ptr == '\t') result += "\\t";
                         else if (*ptr == '"') result += "\\\"";
+                        else if (*ptr == '\\') result += "\\\\";
 
                         begin = ptr + 1;
                     }

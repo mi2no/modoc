@@ -10,32 +10,32 @@
 namespace modoc {
 
     struct theme {
-        uint32_t background;
-        uint32_t background1;
-        uint32_t background2;
-        uint32_t surface1;
-        uint32_t surface2;
-        uint32_t surface3;
+        uint32_t background; // Base
+        uint32_t background1; // Mantle
+        uint32_t background2; // Crust
+        uint32_t surface1; // Surface 0
+        uint32_t surface2; // Surface 1
+        uint32_t surface3; // Surface 2
         uint32_t text;
-        uint32_t text1;
-        uint32_t text2;
-        uint32_t text3;
-        uint32_t text4;
-        uint32_t text5;
-        uint32_t color1;
-        uint32_t color2;
-        uint32_t color3;
-        uint32_t color4;
-        uint32_t color5;
-        uint32_t color6;
-        uint32_t color7;
-        uint32_t color8;
-        uint32_t color9;
-        uint32_t color10;
-        uint32_t color11;
-        uint32_t color12;   
-        uint32_t color13;  
-        uint32_t color14;
+        uint32_t text1; // Subtext 1
+        uint32_t text2; // Subtext 0
+        uint32_t text3; // Overlay 2
+        uint32_t text4; // Overlay 1
+        uint32_t text5; // Overlay 0
+        uint32_t color1; // Rosewater
+        uint32_t color2; // Flamingo
+        uint32_t color3; // Pink
+        uint32_t color4; // Mauve
+        uint32_t color5; // Red
+        uint32_t color6; // Maroon
+        uint32_t color7; // Peach
+        uint32_t color8; // Yellow
+        uint32_t color9; // Green
+        uint32_t color10; // Teal
+        uint32_t color11; // Sky
+        uint32_t color12; // Sapphire 
+        uint32_t color13; // Blue
+        uint32_t color14; // Lavender
 
     private:
 
