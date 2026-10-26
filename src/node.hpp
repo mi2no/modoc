@@ -83,6 +83,8 @@ struct node {
     virtual bool is_primitive() const {
         return true;
     } // TODO: rename to is_core?
+
+    virtual void finalize() {}
     
     virtual ~node() = default;
 };
@@ -126,12 +128,26 @@ struct text_node : node {
 
     text_node(std::vector<modoc::string_type>&& tokens) {
         this->tokens = std::move(tokens);
+
+        std::string result = "";
+        for (auto& t : this->tokens) {
+            result += t.view();
+            result += ' ';
+        }
+        modoc::logger::s_log("text", "constructor", result);
     }
 
     text_node(std::vector<modoc::string_type>&& tokens, uint16_t offset) {
         this->tokens.resize(tokens.size() - offset);
         for (uint16_t i = offset, j = 0; i < tokens.size(); ++i, ++j)
             this->tokens[j] = std::move(tokens[i]);
+
+        std::string result = "";
+        for (auto& t : this->tokens) {
+            result += t.view();
+            result += ' ';
+        }
+        modoc::logger::s_log("text", "constructor", result);
     }
 
 

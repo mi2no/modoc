@@ -43,9 +43,9 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
 
         //printf("[%.*s]\n", (int)nt.node_name.size(), nt.node_name.data());
         node* n = node_factories.at(nt.node_name.view())->instance(result, depth, map);
-        n->parent = &result;
 
         if (n != nullptr) {
+            n->parent = &result;
             {
                 std::string_view meta = nt.meta.view();
                 if (meta.size()) {
@@ -114,6 +114,9 @@ modoc::tree modoc::tree::initialize_node(tree& tree, uninitialized_tree::unode& 
                     tree.assign(entry.first, std::move(v));
                 }*/
 
+                n->finalize(); 
+                // This only gets called for primitive nodes.
+                // Special nodes are expanded instead.
 
                 //return {n};
                 result.insert_node(n);

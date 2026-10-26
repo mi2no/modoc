@@ -32,7 +32,7 @@ struct code_node : node {
     code_node(std::string lang) : lang(lang) {}
     
     code_node(std::string lang, std::filesystem::path src) : lang(lang), src(src) {
-        //if (!src.empty()) content = modoc::read_file_as_string(src.string());  
+        if (!src.empty()) content = modoc::read_file_as_string(src.string());  
     }
 
     virtual uint32_t type_id() const override {
@@ -283,22 +283,8 @@ struct code_node : node {
     
     void parse_verbatim(std::string_view str, bool to_copy) override {
         if (content.empty()) {
-            if (!meta.contains("padding")) meta["padding"] = 6;
-
             modoc::logger::s_log("code", "verbatim", str);
             content = str;
-
-            tokens = tokenize(content, get_theme(), src.string());
-            
-            std::string result;
-            for (auto& t : tokens) {
-                result += '(';
-                result += t.str;
-                result += ", ";
-                result += std::to_string(t.type);
-                result += ')';
-            }
-            modoc::logger::s_log("code", "verbatim", result);
         }
     }
 
@@ -322,6 +308,22 @@ struct code_node : node {
         printf("[code](lang = %s)\n", lang.c_str());
     }*/
 
+    void finalize() override {
+        if (!meta.contains("padding")) meta["padding"] = 6;
+        
+        tokens = tokenize(content, get_theme(), src.string());
+            
+        std::string result;
+        for (auto& t : tokens) {
+            result += '(';
+            result += t.str;
+            result += ", ";
+            result += std::to_string(t.type);
+            result += ')';
+        }
+        modoc::logger::s_log("code", "finalize", result);
+    }
+
     const std::vector<node*>* child_nodes() const override {
         return nullptr;
     }
@@ -336,6 +338,7 @@ struct code_node : node {
 
     void add_node(node*) override {}
 
+    ~code_node() override {}
 };
 
 struct code_f : node_factory {
