@@ -194,12 +194,20 @@ extern "C" void compile(const std::vector<node*>& tree) {
     FILE* const out = fopen("out.html", "w");
     std::string result;
 
-    result += "<!DOCTYPE HTML>\n<html>";
+    result += "<!DOCTYPE HTML>\n<html>\n\
+<style>\n\
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Code:ital,wght,MONO@0,300..800,1;1,300..800,1&display=swap');\n\
+    code {\n\
+        font-family: \"Google Sans Code\", monospace;\n\
+        tab-size: 4ch;\n\
+    }\n\
+</style>\n\
+<body>\n";
 
     for (const node* n : tree)
        result += node_to_str(n);
 
-    result += "</html>";
+    result += "</body>\n</html>";
 
     fputs(result.c_str(), out);
 

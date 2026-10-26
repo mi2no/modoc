@@ -23,6 +23,21 @@ namespace modoc {
         return {buffer, buffer + size};
     }
 
+    static std::string read_file_as_string(std::string_view path) {
+        FILE* file = fopen(path.data(), "r");
+        std::string buffer;
+       
+        fseek(file, 0, SEEK_END);
+        const size_t size = ftell(file);
+
+        rewind(file);
+
+        buffer.resize(size);
+        fread(buffer.data(), 1, size, file);
+
+        return buffer;
+    }
+
     static std::set<char> operator_chars = {'(', ')', '{', '}', '[', ']', '+', '-', '*', '/', '^', '=', ',', '.'};
 
     static std::string_view get_scope(std::string_view str, const char open, const char close) {

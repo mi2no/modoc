@@ -11,7 +11,7 @@ struct code_node : node {
     inline static uint32_t t_id;
 
     enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY
+        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY, ENUM
     };
 
     struct token_t {
@@ -31,7 +31,9 @@ struct code_node : node {
 
     code_node(std::string lang) : lang(lang) {}
     
-    code_node(std::string lang, std::filesystem::path src) : lang(lang), src(src) {}
+    code_node(std::string lang, std::filesystem::path src) : lang(lang), src(src) {
+        //if (!src.empty()) content = modoc::read_file_as_string(src.string());  
+    }
 
     virtual uint32_t type_id() const override {
         return code_node::t_id;
@@ -64,6 +66,7 @@ struct code_node : node {
         uint32_t parameters; // Maroon
         uint32_t classes; // Yellow
         uint32_t properties; // Lavender
+        uint32_t enums; // Yellow
     };
 
     static uint32_t argb(uint8_t type, const theme& t) { // TODO: remove this
@@ -157,6 +160,7 @@ struct code_node : node {
                 if ((len == 4 && strncmp(begin, "true", 4) == 0) || (len == 5 && strncmp(begin, "false", 5) == 0)) type = BOOLEAN;
                 else if (types.contains({begin, ptr})) type = TYPE;
                 else if (keywords.contains({begin, ptr})) type = KEYWORD;
+                else if (len == 6 && strncmp(begin, "sizeof", 6) == 0) type = OPERATOR;
             }
         }
 
@@ -174,6 +178,7 @@ struct code_node : node {
         else if (type == "parameter") return {token_str, PARAMETER, theme.parameters};
         else if (type == "class") return {token_str, CLASS, theme.classes};
         else if (type == "property") return {token_str, PROPERTY, theme.properties};
+        else if (type == "enum") return {token_str, ENUM, theme.enums};
 
         return {token_str, NONE, theme.text};
     }
@@ -270,28 +275,31 @@ struct code_node : node {
             t.parameters = obj.at("color6").number();
             t.classes = t.types;
             t.properties = obj.at("color14").number();
+            t.enums = t.types;
         }
 
         return t;
     }
     
     void parse_verbatim(std::string_view str, bool to_copy) override {
-        if (!meta.contains("padding")) meta["padding"] = 6;
+        if (content.empty()) {
+            if (!meta.contains("padding")) meta["padding"] = 6;
 
-        modoc::logger::s_log("code", "verbatim", str);
-        content = str;
+            modoc::logger::s_log("code", "verbatim", str);
+            content = str;
 
-        tokens = tokenize(content, get_theme(), src.string());
-        
-        std::string result;
-        for (auto& t : tokens) {
-            result += '(';
-            result += t.str;
-            result += ", ";
-            result += std::to_string(t.type);
-            result += ')';
+            tokens = tokenize(content, get_theme(), src.string());
+            
+            std::string result;
+            for (auto& t : tokens) {
+                result += '(';
+                result += t.str;
+                result += ", ";
+                result += std::to_string(t.type);
+                result += ')';
+            }
+            modoc::logger::s_log("code", "verbatim", result);
         }
-        modoc::logger::s_log("code", "verbatim", result);
     }
 
     virtual const value* get_meta(std::string_view name) const override {
