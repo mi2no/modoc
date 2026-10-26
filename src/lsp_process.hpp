@@ -21,7 +21,7 @@ namespace modoc {
             \"method\": \"initialize\",\
             \"params\": {\
                 \"processId\": null,\
-                \"rootUri\": null,\
+                \"rootUri\": \"/home/mike/Documents/PKH/lab/lab4/\",\
                 \"capabilities\": {\
                     \"textDocument\": {\
                         \"semanticTokens\": {\
@@ -228,9 +228,12 @@ namespace modoc {
             msg += "\"}}}";
 
             send(msg);
-            receive();
+
+            std::string token_msg;
+            do {
+                token_msg = receive();
+            } while (json::deserialize_field<std::string>(token_msg.c_str(), "method") == "textDocument/publishDiagnostics");
             
-            std::string token_msg = receive();
             puts(json::pretty(token_msg.c_str()).c_str());
 
             const ssize_t idx = token_msg.find("data");

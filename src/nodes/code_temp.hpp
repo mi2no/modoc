@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <filesystem>
 
 #include "../node.hpp"
 #include "../lsp_process.hpp"
@@ -26,7 +27,11 @@ struct code_node : node {
     std::vector<token_t> tokens{};
     std::string lang;
 
+    std::filesystem::path src;
+
     code_node(std::string lang) : lang(lang) {}
+    
+    code_node(std::string lang, std::filesystem::path src) : lang(lang), src(src) {}
 
     virtual uint32_t type_id() const override {
         return code_node::t_id;
@@ -42,29 +47,7 @@ struct code_node : node {
     }
 
 
-    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {
-        /*static const std::unordered_set<std::string> types {"char", "short", "int", "long"};
-        static const std::unordered_set<std::string> keywords {"if", "else", "return", "throw"};
-
-
-        tokens.reserve(tokens.size() + new_tokens.size() + 1);
-
-        {
-            token_t t {"0", NEWL};
-            t.str[0] = tabs;
-            tokens.push_back(t);
-        }
-
-        for (const modoc::string_type& s : new_tokens) {
-            token_t t;
-            t.str = s.view();
-
-            if (types.contains(t.str)) t.type = TYPE;
-            else if (keywords.contains(t.str)) t.type = KEYWORD;
-
-            tokens.push_back(t);
-        }*/
-    }
+    void parse_tokens(std::vector<modoc::string_type>&& new_tokens, uint8_t tabs) override {}
 
     struct theme {
         uint32_t background; // Base
@@ -98,7 +81,7 @@ struct code_node : node {
 
     //TODO: Could be combined with lsp modoc tokenize????
     static size_t tokenize_value(std::vector<token_t>& tokens, std::string_view str, const theme& theme) {
-        static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "uint16_t"};
+        static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "void", "bool"};
         static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include", "struct", "class", "template", "typename"};
 
         const char* ptr = str.data();
@@ -195,7 +178,7 @@ struct code_node : node {
         return {token_str, NONE, theme.text};
     }
 
-    static std::vector<token_t> tokenize(std::string_view str, const theme& theme) {
+    static std::vector<token_t> tokenize(std::string_view str, const theme& theme, std::string_view src) {
         std::vector<token_t> result;
         const char* begin = nullptr;
 
@@ -228,10 +211,10 @@ struct code_node : node {
 
         {
             modoc::lsp_process lsp;
-            const std::string_view name = "file:///tmp/main.cpp";
+            const std::string name = src.empty() ? "file:///tmp/main.cpp" : (std::string("file://") + std::string(src));
 
             lsp.init("clangd");
-            
+
             lsp.open_document({name, "cpp", str, 1});
             std::vector<modoc::lsp_process::token> tokens = lsp.request_tokens(name);
             lsp.close_document(name);
@@ -298,7 +281,7 @@ struct code_node : node {
         modoc::logger::s_log("code", "verbatim", str);
         content = str;
 
-        tokens = tokenize(content, get_theme());
+        tokens = tokenize(content, get_theme(), src.string());
         
         std::string result;
         for (auto& t : tokens) {
@@ -363,8 +346,13 @@ struct code_f : node_factory {
     }
 
     node* instance(modoc::tree& parent, uint8_t, const options_t& op) override {
+        std::filesystem::path src;
+        if (op.contains("src") && op.at("src").type() == value::STRING) {
+            src = modoc::paths.document_resource(op.at("src").string());    
+        }
+
         if (op.contains("lang") && op.at("lang").type() == value::STRING) {
-            return new code_node((std::string)op.at("lang").string());
+            return new code_node((std::string)op.at("lang").string(), src);
         }
         return nullptr;
     }

@@ -199,6 +199,8 @@ int main(int argc, char** argv) {
     rewind(file);
     char* buffer = (char*)malloc(size);
     fread(buffer, 1, size, file);
+
+    modoc::paths.init(argv[1]);
    
     /*std::string result = inner_document(buffer);
     std::string header;

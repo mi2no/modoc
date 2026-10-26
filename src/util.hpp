@@ -2,8 +2,10 @@
 
 #include "log.hpp"
 #include <set>
+#include <string>
 #include <string_view>
 #include <cstdint>
+#include <filesystem>
 
 namespace modoc {
 
@@ -75,4 +77,25 @@ namespace modoc {
     }
 
     static std::set<pid_t> child_processes_to_close;
-};
+
+    struct {
+        std::filesystem::path doc;
+        std::filesystem::path doc_parent;
+
+        void init(std::string_view document_uri) {
+            doc = std::filesystem::canonical(document_uri);
+            doc_parent = doc.parent_path();
+
+            std::string log = "doc = ";
+            log += doc;
+            log += "\nparent = ";
+            log += doc_parent;
+
+            modoc::logger::s_log("paths", "init", log);
+        }
+
+        std::filesystem::path document_resource(std::string_view relative_path) {
+           return std::filesystem::canonical(doc_parent / relative_path); 
+        }
+    } inline paths;
+}
