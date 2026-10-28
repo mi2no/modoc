@@ -10,8 +10,14 @@
 struct code_node : node {
     inline static uint32_t t_id;
 
+    enum token_modifiers : uint32_t {
+        DEFAULT_LIB = 1
+    };
+
     enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR, FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY, ENUM
+        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR,
+        FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY, ENUM,
+        ENUM_MEMBER
     };
 
     struct token_t {
@@ -67,6 +73,9 @@ struct code_node : node {
         uint32_t classes; // Yellow
         uint32_t properties; // Lavender
         uint32_t enums; // Yellow
+        uint32_t enum_members; // Teal
+
+        uint32_t default_lib; // Peach
     };
 
     static uint32_t argb(uint8_t type, const theme& t) { // TODO: remove this
@@ -85,7 +94,7 @@ struct code_node : node {
     //TODO: Could be combined with lsp modoc tokenize????
     static size_t tokenize_value(std::vector<token_t>& tokens, std::string_view str, const theme& theme) {
         static const std::unordered_set<std::string_view> types {"char", "short", "int", "long", "float", "double", "void", "bool"};
-        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "#include", "struct", "class", "template", "typename"};
+        static const std::unordered_set<std::string_view> keywords {"if", "else", "return", "throw", "for", "constexpr", "struct", "class", "template", "typename"};
 
         const char* ptr = str.data();
         uint8_t type = NONE;
@@ -128,7 +137,7 @@ struct code_node : node {
                     begin = ptr + 1; 
                 }
                 else if (ptr + 1 < str.end() && ptr[0] == '*' && ptr[1] == '/') {
-                    ++ptr;
+                    ptr += 2;
                     break;
                 }
                 ++ptr;
@@ -152,7 +161,7 @@ struct code_node : node {
                 len = read_end - ptr;
             }
             else {
-                const char* const begin = ptr;
+                const char* begin = ptr;
                 while (ptr < str.end() && *ptr > ' ' && !modoc::operator_chars.contains(*ptr)) ++ptr;
 
                 len = ptr - begin;
@@ -161,6 +170,23 @@ struct code_node : node {
                 else if (types.contains({begin, ptr})) type = TYPE;
                 else if (keywords.contains({begin, ptr})) type = KEYWORD;
                 else if (len == 6 && strncmp(begin, "sizeof", 6) == 0) type = OPERATOR;
+                else if (len == 8 && strncmp(begin, "#include", 8) == 0) {
+                    tokens.emplace_back(std::string_view{begin, ptr}, KEYWORD, theme.keywords);
+
+                    do {
+                        ++ptr;
+                    } while (ptr < str.end() && *ptr != '<');
+
+                    begin = ptr;
+
+                    do {
+                        ++ptr;
+                    } while (ptr < str.end() && *ptr != '>');
+                    ++ptr;
+
+                    tokens.emplace_back(std::string_view{begin, ptr}, STRING, theme.strings);
+                    return ptr - str.data();
+                }
             }
         }
 
@@ -179,6 +205,7 @@ struct code_node : node {
         else if (type == "class") return {token_str, CLASS, theme.classes};
         else if (type == "property") return {token_str, PROPERTY, theme.properties};
         else if (type == "enum") return {token_str, ENUM, theme.enums};
+        else if (type == "enumMember") return {token_str, ENUM_MEMBER, theme.enum_members};
 
         return {token_str, NONE, theme.text};
     }
@@ -276,6 +303,9 @@ struct code_node : node {
             t.classes = t.types;
             t.properties = obj.at("color14").number();
             t.enums = t.types;
+            t.enum_members = obj.at("color10").number();
+
+            t.default_lib = t.numbers;
         }
 
         return t;
@@ -317,7 +347,9 @@ struct code_node : node {
         for (auto& t : tokens) {
             result += '(';
             result += t.str;
-            result += ", ";
+            result += ", {";
+            result += std::string_view{t.str.end(), t.str.end() + 3};
+            result += "}, ";
             result += std::to_string(t.type);
             result += ')';
         }
