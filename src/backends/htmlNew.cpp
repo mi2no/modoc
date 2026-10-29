@@ -104,15 +104,17 @@ std::string node_to_str(const node* n) {
     else if (node::is_type<code_node>(n)) {
         code_node* c = (code_node*)n;
 
-        std::vector<std::vector<code_node::token_t>> lines;
-        uint8_t tabs = 0;
+        //std::vector<std::vector<code_node::token_t>> lines;
+        //uint8_t tabs = 0;
 
-        const uint32_t color_background = c->get_meta("background")->number();//c->meta.at("theme").object().at("background").number());
+        const uint32_t color_background = c->get_meta("background")->number();
+
+        //c->meta.at("theme").object().at("background").number());
         //const uint32_t color_line_nums = c->get_meta("lineNumbers")->number();//c->meta.at("theme").object().at("lineNumbers").number());
 
         //const double padding = c->meta.at("padding").number();
 
-        const code_node::token_t* t = c->tokens.data();
+        /*const code_node::token_t* t = c->tokens.data();
         const char* ptr = c->content.data();
         while (t < c->tokens.end().base()) {
             if (ptr == t->str.begin()) {
@@ -132,23 +134,40 @@ std::string node_to_str(const node* n) {
                 lines.back().emplace_back(std::string_view{ptr, t->str.data()}, code_node::NONE, 0xFF000000);
                 ptr = t->str.begin();
             }
-        }
+        }*/
 
         result += "<pre style=\"background-color:#";
         result += std::format("{:06x}", color_background & 0x00FFFFFF);
+        result += ";color:#";
+        result += std::format("{:06x}", c->_theme.text & 0x00FFFFFF);
         result += ";\">\n<code>\n";
 
-        uint32_t prev_color = 0;
+        std::cout << "\033[32m";
+        const char* prev = nullptr;
+        for (code_node::token_t token : c->_content()) {
+            std::cout << '{' << token.str.size() << '}' << token.str << '(' << (int)token.type << ')';
+            if (prev != nullptr) std::cout << '[' << (prev < token.str.begin()) << ']';
+            prev = token.str.begin();
+
+            if (token.type == code_node::NONE || token.type == code_node::NEWL) result += token.str;
+            else {
+                result += "<span style=\"color:#";
+                result += std::format("{:06x}", token.color & 0x00FFFFFF);
+
+                if (token.italic) result += ";font-style:italic;\">";
+                else result += ";\">";
+
+                add_formated(result, token.str);
+                result += "</span>";
+            }
+        }
+        std::cout << "\033[0m\n";
+
+        /*uint32_t prev_color = 0;
         for (size_t i = 0; i < lines.size(); ++i) {
             const std::string line_num_str = std::to_string(i + 1);
-            /*x += ((int)log10(lines.size()) - (int)log10(i + 1)) * doc.text_width(" ", font, size, true); // right align TODO: remove log10!!!
-            doc.draw_text(font, size, x, doc.cursor_y - line_h + 3.0 + (line_h - size) * 0.3, line_num_str, color_line_nums);
-            x += doc.text_width(line_num_str, font, size, true);
-            x += 10;*/
 
             for (const code_node::token_t& t : lines[i]) {
-                //std::cout << p.text.size() << ' ' << std::string_view{p.text.data(), p.text.data() + 10} << '\n';
-                //fflush(stdout);
                 if (t.color != 0xFF000000) {
                     result += "<span style=\"color:#";
                     result += std::format("{:06x}", t.color & 0x00FFFFFF);
@@ -163,7 +182,7 @@ std::string node_to_str(const node* n) {
             }
             
             result += '\n';
-        }
+        }*/
 
         result += "</code>\n</pre>\n";
     }

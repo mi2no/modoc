@@ -15,7 +15,7 @@ struct code_node : node {
     };
 
     enum token_type : uint8_t {
-        NEWL, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR,
+        NEWL, END, NONE, KEYWORD, TYPE, NUMBER, BOOLEAN, STRING, OPERATOR,
         FUNCTION, COMMENT, MACRO, PARAMETER, CLASS, PROPERTY, ENUM,
         ENUM_MEMBER
     };
@@ -74,9 +74,10 @@ struct code_node : node {
         uint32_t properties; // Lavender
         uint32_t enums; // Yellow
         uint32_t enum_members; // Teal
+        uint32_t booleans; // Teal
 
         uint32_t default_lib; // Peach
-    };
+    } _theme;
 
     static uint32_t argb(uint8_t type, const theme& t) { // TODO: remove this
         switch (type) {
@@ -87,6 +88,7 @@ struct code_node : node {
             case STRING: return t.strings;
             case FUNCTION: return t.functions;
             case COMMENT: return t.comments;
+            case BOOLEAN: return t.booleans;
         }
         return t.text;
     }
@@ -260,14 +262,26 @@ struct code_node : node {
                 if (itr2->str.begin() < itr1->str.begin()) {
                     std::cout << '<' << itr1->str << ' ' << itr2->str << '\n';
                     itr1 = result.insert(itr1, get_token(lsp.token_types[itr2->type_id], itr2->str, theme));
+
+                    ++itr1;
+
+                    while (itr1 < result.end() && itr1->str.begin() < itr2->str.end())
+                        itr1 = result.erase(itr1);
+
                     ++itr2;
                 }
                 else if (itr2->str.begin() == itr1->str.begin()) {
                     std::cout << '=' << itr1->str << ' ' << itr2->str << '\n';
                     *itr1 = get_token(lsp.token_types[itr2->type_id], itr2->str, theme);
+
+                    ++itr1;
+
+                    while (itr1 < result.end() && itr1->str.begin() < itr2->str.end())
+                        itr1 = result.erase(itr1);
+
                     ++itr2;
                 }
-                ++itr1;
+                else ++itr1;
             }
 
             while (itr2 < tokens.end()) {
@@ -304,6 +318,7 @@ struct code_node : node {
             t.properties = obj.at("color14").number();
             t.enums = t.types;
             t.enum_members = obj.at("color10").number();
+            t.booleans = t.numbers;
 
             t.default_lib = t.numbers;
         }
@@ -341,7 +356,8 @@ struct code_node : node {
     void finalize() override {
         if (!meta.contains("padding")) meta["padding"] = 6;
         
-        tokens = tokenize(content, get_theme(), src.string());
+        _theme = get_theme();
+        tokens = tokenize(content, _theme, src.string());
             
         std::string result;
         for (auto& t : tokens) {
@@ -371,6 +387,77 @@ struct code_node : node {
     void add_node(node*) override {}
 
     ~code_node() override {}
+
+    struct content_t {
+        const std::string_view str;
+        const std::span<const token_t> tokens;
+        
+        const uint32_t text_color;
+
+        struct content_iterator {
+            const char* pos;
+            const char* const end;
+
+            const token_t* token_pos;
+            const token_t* const token_end;
+
+            const uint32_t text_color;
+
+            content_iterator(std::string_view str, std::span<const token_t> tokens, uint32_t text_color) : 
+                pos(str.data()), end(str.end()), token_pos(tokens.data()), token_end(tokens.end().base()),
+                text_color(text_color) {}
+
+            content_iterator& operator++() {
+                if (token_pos < token_end) {
+                    if (pos == token_pos->str.begin()) {
+                        pos = token_pos->str.end();
+                        ++token_pos;
+                    }
+                    else { // Iterator points to gap
+                        pos = token_pos->str.begin(); 
+                    }
+                }
+                else pos = end;
+
+                return *this;
+            }
+
+            token_t operator*() const {
+                if (token_pos < token_end) {
+                    if (pos == token_pos->str.begin()) // Iterator points to token
+                        return *token_pos;
+                    else
+                        return {{pos, token_pos->str.begin()}, NONE, text_color}; 
+                }
+                else if (pos < end) return {{pos, end}, NONE, text_color};
+
+                return {{}, END, 0};
+            }
+
+            bool operator!=(const content_iterator& itr) const {
+                return pos != itr.pos; 
+            }
+
+            bool operator==(const content_iterator& itr) const {
+                return pos == itr.pos; 
+            }
+        };
+
+        content_t(std::string_view str, std::span<const token_t> tokens, uint32_t text_color) :
+            str(str), tokens(tokens), text_color(text_color) {}
+
+        content_iterator begin() const {
+            return {str, tokens, text_color};
+        }
+
+        content_iterator end() const {
+            return {{str.end(), str.end()}, {tokens.end(), tokens.end()}, text_color};
+        }
+    };
+
+    content_t _content() const {
+        return content_t(content, tokens, 0);
+    }
 };
 
 struct code_f : node_factory {

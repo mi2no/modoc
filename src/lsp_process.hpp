@@ -248,31 +248,11 @@ namespace modoc {
             std::vector<uint32_t> nums = {};
             json::deserialize_value(nums, ptr);
 
-            ptr = docs.find(uri)->second.data();
-            token t;
-            std::vector<token> tokens;
-            for (size_t i = 0; i < nums.size();) {
-                {
-                    uint32_t delta_lines = nums[i++];
-                    while (delta_lines)
-                        if (*ptr++ == '\n') --delta_lines;
-                }
-                {
-                    uint32_t delta_cols = nums[i++];
-                    ptr += delta_cols;
-                }
-                t.str = {ptr, ptr + nums[i++]};
-                t.type_id = nums[i++];
-                t.modifiers = nums[i++];
-                tokens.push_back(t);
-            }
-
-            std::cout << "########## UTF aware parsing: #########\n";
-
             modoc::utf_iterator utf_itr = docs.find(uri)->second;
 
             uint32_t prev_length = 0;
-            tokens.clear();
+            token t;
+            std::vector<token> tokens;
             for (size_t i = 0; i < nums.size();) {
                 uint32_t delta_lines = nums[i++];
 
@@ -285,15 +265,10 @@ namespace modoc {
                     prev_length = 0;
                 }
 
-                uint32_t delta_cols = nums[i++];
-
-                std::cout << "delta: " << delta_cols << " diff: " << (delta_cols - prev_length) << '\n';
-
-                delta_cols -=  prev_length;
+                uint32_t delta_cols = nums[i++] - prev_length;
 
                 while (delta_cols) {
-                    const auto [bytes, ptr] = *utf_itr;
-                    if (bytes != 0) std::cout << "char: " << std::string_view{ptr, ptr + bytes} << " bytes: " << int(bytes) << '\n';
+                    const auto [bytes, _] = *utf_itr;
                     delta_cols -= std::max(bytes >> 1, 1); // 2 or 1
                     ++utf_itr;
                 }
@@ -314,7 +289,6 @@ namespace modoc {
                 t.type_id = nums[i++];
                 t.modifiers = nums[i++];
                 tokens.push_back(t);
-                std::cout << "token: [" << t.str << "] " << token_types[t.type_id] << '\n';
             }
 
             for (const auto& t : tokens) {

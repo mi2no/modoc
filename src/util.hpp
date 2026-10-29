@@ -38,7 +38,7 @@ namespace modoc {
         return buffer;
     }
 
-    static std::set<char> operator_chars = {'(', ')', '{', '}', '[', ']', '+', '-', '*', '/', '^', '=', ',', '.'};
+    static std::set<char> operator_chars = {'(', ')', '{', '}', '[', ']', '+', '-', '*', '/', '^', '=', ',', '.', ';'};
 
     static std::string_view get_scope(std::string_view str, const char open, const char close) {
         const char* ptr = str.data();
