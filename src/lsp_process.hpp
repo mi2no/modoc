@@ -1,6 +1,5 @@
 #pragma once
 
-#include "util.hpp"
 #include <charconv>
 #include <cstring>
 #include <string>
@@ -10,6 +9,9 @@
 #include <map>
 
 #include "serialize/serialize.hpp"
+#include "utf.hpp"
+#include "util.hpp"
+
 
 namespace modoc {
     struct lsp_process {
@@ -265,7 +267,57 @@ namespace modoc {
                 tokens.push_back(t);
             }
 
-        for (const auto& t : tokens) {
+            std::cout << "########## UTF aware parsing: #########\n";
+
+            modoc::utf_iterator utf_itr = docs.find(uri)->second;
+
+            uint32_t prev_length = 0;
+            tokens.clear();
+            for (size_t i = 0; i < nums.size();) {
+                uint32_t delta_lines = nums[i++];
+
+                if (delta_lines) {
+                    while (delta_lines) {
+                        const auto [_, ptr] = *utf_itr;
+                        if (*ptr == '\n') --delta_lines;
+                        ++utf_itr;
+                    }
+                    prev_length = 0;
+                }
+
+                uint32_t delta_cols = nums[i++];
+
+                std::cout << "delta: " << delta_cols << " diff: " << (delta_cols - prev_length) << '\n';
+
+                delta_cols -=  prev_length;
+
+                while (delta_cols) {
+                    const auto [bytes, ptr] = *utf_itr;
+                    if (bytes != 0) std::cout << "char: " << std::string_view{ptr, ptr + bytes} << " bytes: " << int(bytes) << '\n';
+                    delta_cols -= std::max(bytes >> 1, 1); // 2 or 1
+                    ++utf_itr;
+                }
+                // This could loop forever, if delta_cols points to bytes inside a multi-utf8 char,
+                // but this would be an invalid token in the first place.
+
+                const char* const begin = utf_itr.pos;
+                uint32_t length = prev_length = nums[i++];
+
+                while (length) {
+                    const auto [bytes, _] = *utf_itr;
+                    length -= std::max(bytes >> 1, 1); // 2 or 1
+                    ++utf_itr;
+                }
+                // Same here
+
+                t.str = {begin, utf_itr.pos};
+                t.type_id = nums[i++];
+                t.modifiers = nums[i++];
+                tokens.push_back(t);
+                std::cout << "token: [" << t.str << "] " << token_types[t.type_id] << '\n';
+            }
+
+            for (const auto& t : tokens) {
                 std::cout << t.str << ' ' << token_types[t.type_id] << " |";
 
                 uint32_t mods = t.modifiers;

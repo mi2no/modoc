@@ -161,24 +161,29 @@ namespace json {
             result += '"';
 
             bool esc_chars = false;
-            for (char c : value) 
-                if (c == '\n' || c == '\t' || c == '"') {
+            for (char c : value)
+                if (c == '\n' || c == '\t' || c == '"' || c == '\\') {
                     esc_chars = true;
                     break;
                 }
+            // TODO: remove this check and just use the next loop itself
 
             if (esc_chars) {
                 const char* begin = value.data();
                 const char* const end = value.data() + value.size();
 
+                // This loop encodes escape chars, but doesn't encode
+                // utf16 or utf32 chars as codepoints (\uXXXX). This
+                // isn't a problem, since utf8 encoding is valid json.
                 for (const char* ptr = begin; ptr < end; ++ptr) {
-                    if (*ptr < ' ' || *ptr == '"' || *ptr == '\\') {
+                    const uint8_t utf8 = *ptr;
+                    if (utf8 < ' ' || utf8 == '"' || utf8 == '\\') {
                         result += std::string_view{begin, ptr};
                        
-                        if (*ptr == '\n') result += "\\n";
-                        else if (*ptr == '\t') result += "\\t";
-                        else if (*ptr == '"') result += "\\\"";
-                        else if (*ptr == '\\') result += "\\\\";
+                        if (utf8 == '\n') result += "\\n";
+                        else if (utf8 == '\t') result += "\\t";
+                        else if (utf8 == '"') result += "\\\"";
+                        else if (utf8 == '\\') result += "\\\\";
 
                         begin = ptr + 1;
                     }
